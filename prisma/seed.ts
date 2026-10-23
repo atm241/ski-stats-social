@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { processGpx } from "../src/lib/analysis/process";
 import { prisma } from "../src/lib/db";
 import { saveDay } from "../src/lib/days";
-import { backcountryDay, resortDay, rng, toGpx } from "../src/lib/sample/generate";
+import { backcountryDay, passLapsDay, resortDay, rng, toGpx } from "../src/lib/sample/generate";
 import type { Resort } from "../src/lib/resorts/types";
 
 const resorts = JSON.parse(readFileSync("data/resorts.json", "utf8")) as Resort[];
@@ -133,8 +133,12 @@ async function main() {
           points = resortDay({ lat: r.center[1], lon: r.center[0], baseEle, topEle: baseEle + vert, laps: 5 + Math.floor(rand() * 10), start, seed: seed++ });
         } else {
           const [lat, , ele] = trip.backcountry;
-          const laps = Array.from({ length: 1 + Math.floor(rand() * 3) }, () => ({ gain: 300 + rand() * 500 }));
-          points = backcountryDay({ lat, lon, baseEle: ele, laps, start, seed: seed++ });
+          const laps = Array.from({ length: 1 + Math.floor(rand() * 3) }, () => ({ gain: 300 + rand() * 500, bootpack: rand() < 0.3 }));
+          // Some pass days are hitchhiked laps instead of a tour.
+          points =
+            rand() < 0.35
+              ? passLapsDay({ lat, lon, topEle: ele, laps: 3 + Math.floor(rand() * 4), drop: 350 + rand() * 200, start, carSpeed: 6 + rand() * 8, seed: seed++ })
+              : backcountryDay({ lat, lon, baseEle: ele, laps, start, seed: seed++ });
         }
 
         for (const day of processGpx(toGpx(points)).days) {

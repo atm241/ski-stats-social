@@ -126,7 +126,8 @@ export interface BackcountryDayOptions {
   lat: number;
   lon: number;
   baseEle: number;
-  laps: { gain: number }[];
+  /** bootpack: hike straight up on foot instead of a switchbacking skin track */
+  laps: { gain: number; bootpack?: boolean }[];
   start: Date;
   seed?: number;
 }
@@ -136,13 +137,49 @@ export function backcountryDay(o: BackcountryDayOptions): TrackPoint[] {
   const b = new TrackBuilder(o.lat, o.lon, o.baseEle, o.start.getTime(), rand);
   let x = 0;
   for (const lap of o.laps) {
-    const len = lap.gain * 4;
-    b.moveTo(x + len * 0.3, len, b.ele + lap.gain, 0.45 + rand() * 0.15, 25); // skin track, ~1,200–1,600 ft/hr
+    const len = lap.bootpack ? lap.gain * 1.3 : lap.gain * 4;
+    if (lap.bootpack) b.moveTo(x + len * 0.1, len, b.ele + lap.gain, 0.13 + rand() * 0.04, 3); // steep bootpack, ~1,100–1,500 ft/hr
+    else b.moveTo(x + len * 0.3, len, b.ele + lap.gain, 0.45 + rand() * 0.15, 25); // skin track, ~1,200–1,600 ft/hr
     b.wait(600 + rand() * 300); // transition
     x += len * 0.3;
     b.moveTo(x, 0, b.ele - lap.gain, 6 + rand() * 3, 30);
     b.wait(120);
   }
+  return b.points;
+}
+
+export interface PassLapsOptions {
+  lat: number;
+  lon: number;
+  /** elevation of the pass / trailhead at the top of the road */
+  topEle: number;
+  laps: number;
+  drop: number;
+  start: Date;
+  /** car speed for the hitchhike back up, m/s */
+  carSpeed: number;
+  /** drive down the far side of the pass at the end of the day */
+  driveOut?: boolean;
+  seed?: number;
+}
+
+/** Ski down from a road pass, hitch a ride back up the switchbacking road, repeat. */
+export function passLapsDay(o: PassLapsOptions): TrackPoint[] {
+  const rand = rng(o.seed ?? 4);
+  const b = new TrackBuilder(o.lat, o.lon, o.topEle, o.start.getTime(), rand);
+  const ROAD_GRADE = 0.09;
+  for (let lap = 0; lap < o.laps; lap++) {
+    const runLen = o.drop / 0.35;
+    b.wait(120);
+    b.moveTo(0, -runLen, o.topEle - o.drop, 8 + rand() * 3, 30); // ski to the road
+    b.wait(300 + rand() * 600); // thumb out
+    // road climbs back via a switchback out to the side, ~9% grade
+    const half = o.drop / ROAD_GRADE / 2;
+    const wx = Math.sqrt(Math.max(half ** 2 - (runLen / 2) ** 2, 0));
+    b.moveTo(wx, -runLen / 2, o.topEle - o.drop / 2, o.carSpeed);
+    b.moveTo(0, 0, o.topEle, o.carSpeed);
+  }
+  if (o.driveOut) b.moveTo(-600 / ROAD_GRADE, 0, o.topEle - 600, 15);
   return b.points;
 }
 

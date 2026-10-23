@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseGpx } from "../gpx/parse";
-import { backcountryDay, resortDay, toGpx } from "../sample/generate";
+import { backcountryDay, passLapsDay, resortDay, toGpx } from "../sample/generate";
 import { seasonKey } from "../season";
 import { analyzeDay } from "./analyze";
 import { processGpx } from "./process";
@@ -84,5 +84,39 @@ describe("seasonKey", () => {
   it("keeps a southern-hemisphere winter in one season", () => {
     expect(seasonKey("2026-06-20", -44)).toBe("2026-27");
     expect(seasonKey("2026-09-01", -44)).toBe("2026-27");
+  });
+});
+
+describe("off-resort days", () => {
+  const PASS = { lat: 43.4975, lon: -110.958 };
+
+  it("counts pass laps and ignores the hitchhike back up", () => {
+    const day = analyzeDay(passLapsDay({ ...PASS, topEle: 2560, laps: 4, drop: 450, start, carSpeed: 13 }));
+    expect(day.liftCount).toBe(0);
+    expect(day.runCount).toBe(4);
+    expect(day.verticalM).toBeGreaterThan(1800 * 0.95);
+    expect(day.verticalM).toBeLessThan(1800 * 1.05);
+    expect(day.uphillM).toBeLessThan(50);
+    expect(day.kind).toBe("backcountry");
+  });
+
+  it("doesn't mistake a slow car up a pass road for a chairlift", () => {
+    const day = analyzeDay(passLapsDay({ ...PASS, topEle: 2560, laps: 3, drop: 450, start, carSpeed: 7 }));
+    expect(day.liftCount).toBe(0);
+    expect(day.flags).toEqual([]);
+  });
+
+  it("doesn't count driving down a steep pass road as a run", () => {
+    const day = analyzeDay(passLapsDay({ ...PASS, topEle: 2560, laps: 2, drop: 450, start, carSpeed: 13, driveOut: true }));
+    expect(day.runCount).toBe(2);
+    expect(day.verticalM).toBeLessThan(900 * 1.05);
+  });
+
+  it("counts a steep bootpack as human-powered uphill, not a lift", () => {
+    const day = analyzeDay(backcountryDay({ ...VAIL, baseEle: 3000, laps: [{ gain: 500 }, { gain: 350, bootpack: true }], start }));
+    expect(day.liftCount).toBe(0);
+    expect(day.segments.filter((s) => s.kind === "skin")).toHaveLength(2);
+    expect(day.uphillM).toBeGreaterThan(850 * 0.93);
+    expect(day.uphillM).toBeLessThan(850 * 1.05);
   });
 });

@@ -10,9 +10,9 @@ type Kind = SegmentKind | "other";
 // recessive dashed neutral so they're never distinguished by hue alone.
 const STYLE: Record<Kind, { stroke: string; dash?: string; width: number; label: string }> = {
   run: { stroke: "#2f7fe0", width: 2.5, label: "Run" },
-  skin: { stroke: "#d9822b", width: 2.5, label: "Skin / hike" },
+  skin: { stroke: "#d9822b", width: 2.5, label: "Skinning / hiking" },
   lift: { stroke: "#9aa5bd", dash: "5 4", width: 2, label: "Lift" },
-  drive: { stroke: "#d5dbe8", dash: "1 4", width: 1.5, label: "Drive" },
+  drive: { stroke: "#c4cde0", dash: "6 3 1 3", width: 1.5, label: "Car ride" },
   other: { stroke: "#c4cde0", width: 1.5, label: "Other" },
 };
 
@@ -197,8 +197,8 @@ export function DayViz({ track, segments, timeZone }: { track: StoredTrack; segm
               opacity={part.kind === "run" || part.kind === "skin" ? 0.85 : 1}
             />
           ))}
-          <circle cx={map.px(pts[0])} cy={map.py(pts[0])} r="6" fill="#34c49a" stroke="#fff" strokeWidth="2" />
-          {hp && <circle cx={map.px(hp)} cy={map.py(hp)} r="7" fill="#ff6b9a" stroke="#fff" strokeWidth="2.5" />}
+          <circle cx={map.px(pts[0]).toFixed(1)} cy={map.py(pts[0]).toFixed(1)} r="6" fill="#34c49a" stroke="#fff" strokeWidth="2" />
+          {hp && <circle cx={map.px(hp).toFixed(1)} cy={map.py(hp).toFixed(1)} r="7" fill="#ff6b9a" stroke="#fff" strokeWidth="2.5" />}
         </svg>
         <p className="mt-2 text-xs text-ink-soft">Green dot = where you started. Hover the chart to follow along.</p>
       </figure>

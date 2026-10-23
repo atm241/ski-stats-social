@@ -15,7 +15,7 @@ export function DayCard({ day, user }: { day: SkiDay; user?: User }) {
     <Link href={`/days/${day.id}`} className="card flex items-center gap-3 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
       {user && <Avatar user={user} size={40} />}
       <div className="min-w-0 flex-1">
-        <div className="truncate font-display text-[17px] font-semibold">{day.resortName ?? "Backcountry tour"}</div>
+        <div className="truncate font-display text-[17px] font-semibold">{day.resortName ?? (day.uphillM > 0 ? "Backcountry tour" : "Backcountry laps")}</div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft">
           {user && <span className="font-semibold text-ink">{user.displayName}</span>}
           <span>{prettyDate(day.localDate, { weekday: "short", month: "short", day: "numeric" })}</span>

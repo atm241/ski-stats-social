@@ -47,6 +47,7 @@ model SkiDay {
   liftTimeS     Int      @default(0)
   liftWaitS     Int      @default(0)
   skinTimeS     Int      @default(0)
+  driveTimeS    Int      @default(0)
   longestRunM   Float    @default(0)
   tallestRunM   Float    @default(0)
   peakEleM      Float    @default(0)

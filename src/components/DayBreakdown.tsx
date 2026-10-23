@@ -3,13 +3,14 @@ import { duration, feet, miles, mph } from "@/lib/format";
 
 const FT = 3.28084;
 
-// Same encodings as DayViz: runs blue, skinning orange, lifts recessive gray. Lift lines are a
-// hatched light gray and breaks the track color, so no pair relies on hue alone.
+// Same encodings as DayViz: runs blue, skinning/hiking orange, lifts recessive gray. Lift lines
+// and car rides are patterned neutrals, so no pair relies on hue alone.
 const PARTS = [
   { key: "ski", label: "Skiing", fill: "#2f7fe0" },
-  { key: "skin", label: "Skinning", fill: "#d9822b" },
+  { key: "skin", label: "Skinning / hiking", fill: "#d9822b" },
   { key: "lift", label: "Riding lifts", fill: "#9aa5bd" },
   { key: "wait", label: "Lift lines", fill: "repeating-linear-gradient(135deg,#c4cde0 0 4px,#e3e9f4 4px 8px)" },
+  { key: "drive", label: "Car rides", fill: "repeating-linear-gradient(90deg,#c4cde0 0 6px,#edf2fa 6px 9px)" },
   { key: "rest", label: "Breaks & other", fill: "#edf2fa" },
 ] as const;
 
@@ -20,12 +21,14 @@ export function DayBreakdown({ day }: { day: SkiDay }) {
     skin: day.skinTimeS,
     lift: day.liftTimeS,
     wait: day.liftWaitS,
-    rest: Math.max(0, totalS - day.skiTimeS - day.skinTimeS - day.liftTimeS - day.liftWaitS),
+    drive: day.driveTimeS,
+    rest: Math.max(0, totalS - day.skiTimeS - day.skinTimeS - day.liftTimeS - day.liftWaitS - day.driveTimeS),
   };
   const parts = PARTS.filter((p) => seconds[p.key] > 0);
 
   const avgSpeed = day.skiTimeS > 0 ? day.distanceM / day.skiTimeS : 0;
-  const uphillPace = day.skinTimeS > 0 ? (day.uphillM * FT) / (day.skinTimeS / 3600) : 0;
+  const uphillTimeS = day.skinTimeS;
+  const uphillPace = uphillTimeS > 0 ? (day.uphillM * FT) / (uphillTimeS / 3600) : 0;
 
   const stats: { label: string; value: string; hint?: string }[] = [
     { label: "Distance skied", value: `${miles(day.distanceM)} mi` },
@@ -33,7 +36,7 @@ export function DayBreakdown({ day }: { day: SkiDay }) {
     { label: "Longest run", value: `${miles(day.longestRunM)} mi` },
     { label: "Tallest run", value: `${feet(day.tallestRunM)} ft` },
     { label: "Peak altitude", value: `${feet(day.peakEleM)} ft` },
-    day.skinTimeS > 0
+    uphillTimeS > 0
       ? { label: "Uphill pace", value: `${feet(uphillPace / FT)} ft/hr`, hint: "~1,000 ft/hr is a solid touring pace" }
       : { label: "Vert per hour", value: `${feet(day.verticalM / (totalS / 3600))} ft/hr`, hint: "Across your whole day on the hill" },
   ];

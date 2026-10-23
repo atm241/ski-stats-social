@@ -10,7 +10,7 @@ const BESTS: { key: BestKey; icon: string; label: string; fmt: (d: SkiDay) => st
   { key: "tallestRunM", icon: "📏", label: "Tallest run", fmt: (d) => `${feet(d.tallestRunM)} ft` },
   { key: "longestRunM", icon: "🛤️", label: "Longest run", fmt: (d) => `${miles(d.longestRunM)} mi` },
   { key: "peakEleM", icon: "🚩", label: "Highest point", fmt: (d) => `${feet(d.peakEleM)} ft` },
-  { key: "uphillM", icon: "🥾", label: "Biggest skin day", fmt: (d) => `${feet(d.uphillM)} ft` },
+  { key: "uphillM", icon: "🥾", label: "Biggest uphill day", fmt: (d) => `${feet(d.uphillM)} ft` },
 ];
 
 export function PersonalBests({ days }: { days: SkiDay[] }) {

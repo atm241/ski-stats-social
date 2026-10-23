@@ -8,8 +8,10 @@ import type { DayKind, DayStats, Segment, SegmentKind, TrackPoint } from "./type
  * 1. GPS altitude is noisy, so it's smoothed (rolling median, then rolling mean).
  * 2. The smoothed profile is cut into alternating up/down "legs" with a zigzag filter:
  *    a turn only counts once elevation reverses by PIVOT_HYSTERESIS_M.
- * 3. Each leg is classified: down legs are runs (or drives), up legs are lifts, skinning
- *    or drives, based on vertical rate and horizontal speed.
+ * 3. Each leg is classified: down legs are runs (or drives), up legs are lifts,
+ *    human-powered climbs (skinning or hiking, not told apart) or drives, based on vertical rate, horizontal speed and steepness. Roads are
+ *    gentle (<15%) while lifts and ski runs are steep, which is how car rides (driving to
+ *    the hill, hitchhiking pass laps) are kept out of the stats.
  * 4. Small legs are merged into neighbours so a run with a little uphill bump stays one run.
  * Vertical = total descent across runs, the same rule for resort and backcountry days.
  */
@@ -21,9 +23,16 @@ const MIN_LEG_M = 30;
 const FLAT_TRIM_M = 3;
 /** Chairlifts climb ~1–3 m/s, strong skinners ~0.3 m/s. */
 const LIFT_MIN_VERTICAL_RATE = 0.45;
+/** Downhill: fast and road-gentle is a car; faster than any sustained skiing is a car regardless. */
 const DRIVE_MIN_SPEED = 12;
-const DRIVE_MAX_GRADE = 0.06;
+const DRIVE_MAX_GRADE = 0.12;
+const DRIVE_ANY_GRADE_SPEED = 22;
+/** Uphill: lifts top out around 6 m/s; slower climbs at road grades are cars in traffic. */
 const UP_DRIVE_MIN_SPEED = 10;
+const UP_SLOW_DRIVE_MIN_SPEED = 4;
+const ROAD_MAX_GRADE = 0.15;
+/** Slow uphill travel is measured on positions a minute apart so GPS jitter doesn't inflate distance. */
+const PATH_SAMPLE_S = 60;
 const SPEED_WINDOW_S = 4;
 const GLITCH_SPEED = 70;
 
@@ -135,6 +144,18 @@ export function analyzeDay(points: TrackPoint[]): DayStats {
     return best;
   };
 
+  const pathDistance = (a: number, b: number) => {
+    let d = 0;
+    let prev = a;
+    for (let i = a + 1; i <= b; i++) {
+      if (i === b || points[i].t - points[prev].t >= PATH_SAMPLE_S * 1000) {
+        d += haversine(points[prev].lat, points[prev].lon, points[i].lat, points[i].lon);
+        prev = i;
+      }
+    }
+    return d;
+  };
+
   const pivots = zigzag(ele, PIVOT_HYSTERESIS_M);
   const legs: Leg[] = [];
   for (let p = 0; p + 1 < pivots.length; p++) {
@@ -157,8 +178,15 @@ export function analyzeDay(points: TrackPoint[]): DayStats {
 
     let kind: Leg["kind"];
     if (vertical < MIN_LEG_M) kind = "minor";
-    else if (up) kind = avgSpeed > UP_DRIVE_MIN_SPEED ? "drive" : verticalRate >= LIFT_MIN_VERTICAL_RATE ? "lift" : "skin";
-    else kind = avgSpeed > DRIVE_MIN_SPEED && vertical / Math.max(distanceM, 1) < DRIVE_MAX_GRADE ? "drive" : "run";
+    else if (up) {
+      const grade = vertical / Math.max(pathDistance(s, e), 1);
+      if (avgSpeed > UP_DRIVE_MIN_SPEED || (avgSpeed > UP_SLOW_DRIVE_MIN_SPEED && grade < ROAD_MAX_GRADE)) kind = "drive";
+      else if (verticalRate >= LIFT_MIN_VERTICAL_RATE) kind = "lift";
+      else kind = "skin";
+    } else {
+      const grade = vertical / Math.max(distanceM, 1);
+      kind = (avgSpeed > DRIVE_MIN_SPEED && grade < DRIVE_MAX_GRADE) || avgSpeed > DRIVE_ANY_GRADE_SPEED ? "drive" : "run";
+    }
 
     legs.push({ kind, up, a, b, s, e, verticalM: vertical, distanceM, maxSpeedMps: kind === "run" ? maxSpeedBetween(a, b) : 0, verticalRate });
   }

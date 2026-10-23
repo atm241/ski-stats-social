@@ -10,8 +10,10 @@ export interface DayExtras {
   liftTimeS: number;
   /** time between finishing a run and the lift starting to climb */
   liftWaitS: number;
-  /** time skinning / bootpacking uphill */
+  /** time climbing under your own power (skinning, bootpacking, hiking) */
   skinTimeS: number;
+  /** time in vehicles: shuttles, hitchhiking, driving to the hill */
+  driveTimeS: number;
   /** horizontal length of the longest run */
   longestRunM: number;
   /** vertical drop of the biggest run */
@@ -22,7 +24,7 @@ export interface DayExtras {
 
 /** Derived from segments alone, so existing days can be backfilled without the raw track. */
 export function dayExtras(segments: Segment[]): DayExtras {
-  const out: DayExtras = { skiTimeS: 0, liftTimeS: 0, liftWaitS: 0, skinTimeS: 0, longestRunM: 0, tallestRunM: 0, peakEleM: 0 };
+  const out: DayExtras = { skiTimeS: 0, liftTimeS: 0, liftWaitS: 0, skinTimeS: 0, driveTimeS: 0, longestRunM: 0, tallestRunM: 0, peakEleM: 0 };
   segments.forEach((s, i) => {
     const dur = Math.max(0, (s.endT - s.startT) / 1000);
     if (s.kind === "run") {
@@ -36,6 +38,8 @@ export function dayExtras(segments: Segment[]): DayExtras {
       if (wait > 0 && wait <= MAX_LIFT_LINE_S) out.liftWaitS += wait;
     } else if (s.kind === "skin") {
       out.skinTimeS += dur;
+    } else if (s.kind === "drive") {
+      out.driveTimeS += dur;
     }
     if (s.kind !== "drive") out.peakEleM = Math.max(out.peakEleM, s.startEle, s.endEle);
   });
@@ -43,5 +47,6 @@ export function dayExtras(segments: Segment[]): DayExtras {
   out.liftTimeS = Math.round(out.liftTimeS);
   out.liftWaitS = Math.round(out.liftWaitS);
   out.skinTimeS = Math.round(out.skinTimeS);
+  out.driveTimeS = Math.round(out.driveTimeS);
   return out;
 }

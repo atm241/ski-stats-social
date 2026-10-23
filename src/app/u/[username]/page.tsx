@@ -76,7 +76,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
         <StatTile icon="⛰️" label="Vertical" value={feet(t.verticalM)} unit="ft" tone="sky" />
         <StatTile icon="📅" label="Days" value={String(t.days)} tone="berry" />
         <StatTile icon="🗺️" label="Resorts" value={String(t.resorts)} tone="lilac" />
-        <StatTile icon="🥾" label="Skinned up" value={feet(t.uphillM)} unit="ft" tone="sun" />
+        <StatTile icon="🥾" label="Uphill" value={feet(t.uphillM)} unit="ft" tone="sun" />
       </div>
 
       <MilestoneBar verticalM={t.verticalM} />

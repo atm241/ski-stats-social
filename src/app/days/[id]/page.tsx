@@ -34,7 +34,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
             </Link>{" "}
             · {prettyDate(day.localDate)}
           </div>
-          <h1 className="font-display text-3xl font-bold">{day.resortName ?? "Backcountry tour"}</h1>
+          <h1 className="font-display text-3xl font-bold">{day.resortName ?? (day.uphillM > 0 ? "Backcountry tour" : "Backcountry laps")}</h1>
           <div className="mt-1 flex flex-wrap gap-2">
             <span className={`chip ${chip.className}`}>{chip.label}</span>
             {day.resortCountry && <span className="chip bg-white text-ink-soft ring-1 ring-line">{day.resortCountry}</span>}
@@ -55,7 +55,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
         <StatTile icon="⛰️" label="Vertical" value={feet(day.verticalM)} unit="ft" tone="sky" />
         <StatTile icon="🎿" label="Runs" value={String(day.runCount)} tone="berry" />
         {day.uphillM > 0 ? (
-          <StatTile icon="🥾" label="Skinned up" value={feet(day.uphillM)} unit="ft" tone="sun" />
+          <StatTile icon="🥾" label="Uphill" value={feet(day.uphillM)} unit="ft" tone="sun" />
         ) : (
           <StatTile icon="🚡" label="Lifts" value={String(day.liftCount)} tone="lilac" />
         )}

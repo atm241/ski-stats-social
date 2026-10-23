@@ -35,6 +35,7 @@ export async function saveDay(userId: string, d: ProcessedDay, source: string, f
       liftTimeS: d.stats.liftTimeS,
       liftWaitS: d.stats.liftWaitS,
       skinTimeS: d.stats.skinTimeS,
+      driveTimeS: d.stats.driveTimeS,
       longestRunM: d.stats.longestRunM,
       tallestRunM: d.stats.tallestRunM,
       peakEleM: d.stats.peakEleM,

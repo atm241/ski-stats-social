@@ -12,7 +12,8 @@ export interface TrackPoint {
 /**
  * run   – downhill skiing (counts toward vertical)
  * lift  – mechanized ascent
- * skin  – human-powered ascent (skinning / bootpacking)
+ * skin  – human-powered ascent: skinning, bootpacking or hiking. GPS can't reliably tell
+ *         skis from boots, so these are one category.
  * drive – vehicle travel, excluded from all stats
  */
 export type SegmentKind = "run" | "lift" | "skin" | "drive";
