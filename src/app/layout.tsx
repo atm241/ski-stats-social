@@ -31,6 +31,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <Link href="/upload" className="rounded-full px-3 py-1.5 hover:bg-white hover:text-ink">
                   Upload
                 </Link>
+                <Link href="/settings" className="rounded-full px-3 py-1.5 hover:bg-white hover:text-ink">
+                  Settings
+                </Link>
                 <Link href={`/u/${user.username}`} className="ml-1" aria-label="Your profile">
                   <Avatar user={user} size={36} />
                 </Link>

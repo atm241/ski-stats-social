@@ -11,6 +11,10 @@ datasource db {
 
 model User {
   id          String   @id @default(cuid())
+  /// Sign-in identity. Null only for seeded demo users.
+  email       String?  @unique
+  /// Secret local part of the user's upload address: <uploadToken>@INBOUND_DOMAIN
+  uploadToken String?  @unique
   username    String   @unique
   displayName String
   /// Emoji shown in the user's avatar bubble.
@@ -19,6 +23,49 @@ model User {
   color       String
   createdAt   DateTime @default(now())
   days        SkiDay[]
+  sessions    Session[]
+  uploads     Upload[]
+}
+
+/// Database session; the cookie holds a random token, only its SHA-256 is stored.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+/// One-time sign-in link. Only the token's SHA-256 is stored.
+model LoginToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  @@index([email, createdAt])
+}
+
+/// Every file that came in (web upload or email), so people can see what happened to it.
+model Upload {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "web" | "email"
+  source    String
+  fileName  String
+  /// "imported" | "duplicate" | "skipped" | "error"
+  status    String
+  /// Human-readable result, e.g. "Vail · +21,300 ft" or the error message
+  message   String
+  /// JSON: ids of SkiDays created from this file
+  dayIds    String   @default("[]")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model SkiDay {

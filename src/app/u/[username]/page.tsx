@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { signOut } from "@/app/actions";
 import { Avatar } from "@/components/Avatar";
 import { DayCard } from "@/components/DayCard";
 import { MilestoneBar } from "@/components/MilestoneBar";
@@ -51,9 +50,9 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             <Link href="/upload" className="btn-primary">
               Upload days
             </Link>
-            <form action={signOut}>
-              <button className="btn-ghost">Sign out</button>
-            </form>
+            <Link href="/settings" className="btn-ghost">
+              Settings
+            </Link>
           </div>
         )}
       </div>

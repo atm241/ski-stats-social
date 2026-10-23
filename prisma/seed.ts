@@ -108,8 +108,8 @@ function addDays(date: string, n: number) {
 }
 
 async function main() {
-  await prisma.skiDay.deleteMany();
-  await prisma.user.deleteMany();
+  // Only demo skiers (no email) are replaced; real accounts and their days are left alone.
+  await prisma.user.deleteMany({ where: { email: null } });
 
   let seed = 1;
   for (const s of SKIERS) {
