@@ -1,0 +1,68 @@
+// SQLite for local development. To deploy, switch provider to "postgresql" and point
+// DATABASE_URL at a hosted Postgres (Neon, Supabase, RDS...).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  displayName String
+  /// Emoji shown in the user's avatar bubble.
+  avatar      String
+  /// Avatar background, one of the palette keys in src/lib/avatars.ts.
+  color       String
+  createdAt   DateTime @default(now())
+  days        SkiDay[]
+}
+
+model SkiDay {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Calendar date where the skiing happened, YYYY-MM-DD.
+  localDate     String
+  /// e.g. "2025-26", see src/lib/season.ts
+  seasonKey     String
+  timezone      String
+  startedAt     DateTime
+  endedAt       DateTime
+  /// "resort" | "backcountry" | "mixed"
+  kind          String
+  resortId      String?
+  resortName    String?
+  resortCountry String?
+  verticalM     Float
+  uphillM       Float
+  distanceM     Float
+  maxSpeedMps   Float
+  runCount      Int
+  liftCount     Int
+  skiTimeS      Int      @default(0)
+  liftTimeS     Int      @default(0)
+  liftWaitS     Int      @default(0)
+  skinTimeS     Int      @default(0)
+  longestRunM   Float    @default(0)
+  tallestRunM   Float    @default(0)
+  peakEleM      Float    @default(0)
+  /// Flagged days are kept but excluded from leaderboards.
+  flagged       Boolean  @default(false)
+  flagReasons   String?
+  /// "gpx" today; later "strava", "healthkit", ...
+  source        String
+  fileName      String?
+  /// JSON: StoredTrack (downsampled points) — see src/lib/analysis/process.ts
+  track         String
+  /// JSON: Segment[]
+  segments      String
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, startedAt])
+  @@index([seasonKey, flagged])
+  @@index([userId, localDate])
+}

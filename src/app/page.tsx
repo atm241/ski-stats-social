@@ -1,103 +1,92 @@
-import Image from "next/image";
+import Link from "next/link";
+import { MountainHero } from "@/components/Art";
+import { DayCard } from "@/components/DayCard";
+import { LeaderboardList } from "@/components/LeaderboardList";
+import { MilestoneBar } from "@/components/MilestoneBar";
+import { StatTile } from "@/components/StatTile";
+import { currentUser } from "@/lib/auth";
+import { APP_NAME, TAGLINE } from "@/lib/brand";
+import { prisma } from "@/lib/db";
+import { leaderboard, seasonsWithData, totals } from "@/lib/days";
+import { feet } from "@/lib/format";
+import { currentSeasonKey, seasonLabel } from "@/lib/season";
 
-export default function Home() {
+export default async function Home() {
+  const [me, seasons] = await Promise.all([currentUser(), seasonsWithData()]);
+  const season = seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
+  const [board, recent, myDays] = await Promise.all([
+    leaderboard(season, "vertical"),
+    prisma.skiDay.findMany({ orderBy: [{ createdAt: "desc" }, { startedAt: "desc" }], take: 6, include: { user: true } }),
+    me ? prisma.skiDay.findMany({ where: { userId: me.id, seasonKey: season, flagged: false } }) : Promise.resolve([]),
+  ]);
+  const t = totals(myDays);
+  const myRank = me ? board.find((r) => r.user.id === me.id)?.rank : undefined;
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-4xl bg-linear-to-b from-[#bfe0ff] to-[#e8f3ff] px-6 pt-8 pb-36 sm:px-10 sm:pb-44">
+        <MountainHero className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full sm:h-52" />
+        <div className="relative max-w-lg">
+          {me ? (
+            <>
+              <p className="font-semibold text-sky-deep">
+                {seasonLabel(season)} season {myRank ? `· #${myRank} worldwide` : ""}
+              </p>
+              <h1 className="font-display text-4xl font-bold sm:text-5xl">Hey {me.displayName} {me.avatar}</h1>
+              <p className="mt-2 text-lg text-ink-soft">{t.days ? `${feet(t.verticalM)} ft of vertical across ${t.days} days. Keep sending.` : "Upload your first day to get on the board."}</p>
+              <Link href="/upload" className="btn-primary mt-5">
+                Upload a day
+              </Link>
+            </>
+          ) : (
+            <>
+              <h1 className="font-display text-4xl font-bold sm:text-5xl">{APP_NAME}</h1>
+              <p className="mt-2 text-lg text-ink-soft">{TAGLINE} Upload from Slopes, Garmin, Strava or your watch.</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link href="/login" className="btn-primary">
+                  Make your skier
+                </Link>
+                <Link href="/leaderboard" className="btn-ghost">
+                  See the leaderboard
+                </Link>
+              </div>
+            </>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </section>
+
+      {me && (
+        <section className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatTile icon="⛰️" label="Vertical" value={feet(t.verticalM)} unit="ft" tone="sky" />
+            <StatTile icon="📅" label="Days" value={String(t.days)} tone="berry" />
+            <StatTile icon="🗺️" label="Resorts" value={String(t.resorts)} tone="lilac" />
+            <StatTile icon="🥾" label="Skinned up" value={feet(t.uphillM)} unit="ft" tone="sun" />
+          </div>
+          <MilestoneBar verticalM={t.verticalM} />
+        </section>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <section>
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="font-display text-xl font-semibold">Top vert · {seasonLabel(season)}</h2>
+            <Link href="/leaderboard" className="text-sm font-bold text-sky-deep hover:underline">
+              Full board →
+            </Link>
+          </div>
+          <LeaderboardList rows={board} metric="vertical" meId={me?.id} limit={5} />
+        </section>
+        <section>
+          <h2 className="mb-2 font-display text-xl font-semibold">Fresh tracks</h2>
+          <div className="space-y-2">
+            {recent.map((d) => (
+              <DayCard key={d.id} day={d} user={d.user} />
+            ))}
+            {recent.length === 0 && <p className="card p-6 text-center text-ink-soft">Nothing yet.</p>}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
