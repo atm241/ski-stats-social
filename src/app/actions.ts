@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSession, currentUser, destroySession } from "@/lib/auth";
+import { createApiToken, createSession, currentUser, destroySession } from "@/lib/auth";
 import { AVATAR_COLORS, AVATAR_EMOJI } from "@/lib/avatars";
 import { prisma } from "@/lib/db";
 import { normalizeEmail, redeemLoginLink, requestLoginLink } from "@/lib/magicLink";
@@ -79,4 +79,36 @@ export async function deleteDay(dayId: string) {
   if (!me || !day || day.userId !== me.id) return;
   await prisma.skiDay.delete({ where: { id: dayId } });
   redirect(`/u/${day.user.username}`);
+}
+
+/** Follow or unfollow another skier (from their profile). */
+export async function setFollow(username: string, follow: boolean) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const them = await prisma.user.findUnique({ where: { username } });
+  if (!them || them.id === me.id) return;
+  const key = { followerId: me.id, followingId: them.id };
+  if (follow) await prisma.follow.upsert({ where: { followerId_followingId: key }, create: key, update: {} });
+  else await prisma.follow.deleteMany({ where: key });
+  revalidatePath(`/u/${username}`);
+  revalidatePath("/");
+  revalidatePath("/leaderboard");
+}
+
+export type TokenState = { secret?: string; error?: string };
+
+/** Creates an API token for the iPhone sync app; the secret is returned once to show the user. */
+export async function createSyncToken(_: TokenState, form: FormData): Promise<TokenState> {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const secret = await createApiToken(me.id, String(form.get("name") ?? "iPhone"));
+  revalidatePath("/settings");
+  return { secret };
+}
+
+export async function revokeSyncToken(id: string) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  await prisma.apiToken.deleteMany({ where: { id, userId: me.id } });
+  revalidatePath("/settings");
 }

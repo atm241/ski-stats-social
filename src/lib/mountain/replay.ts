@@ -1,6 +1,7 @@
 import type { StoredTrack } from "../analysis/process";
 import type { Segment, SegmentKind } from "../analysis/types";
-import { densify, type Terrain } from "./terrain";
+import { nameIndex } from "./names";
+import type { Terrain } from "./terrain";
 import type { MountainData } from "./types";
 
 /*
@@ -15,7 +16,6 @@ export type Activity = SegmentKind | "idle";
 const WEIGHT: Record<Activity, number> = { run: 1, skin: 0.6, lift: 0.3, drive: 0.12, idle: 0.04 };
 const CABLE_CLEARANCE = 30; // matches buildScene
 const CHAIR_DROP = 13; // rider hangs below the cable
-const NAME_RADIUS_M = 60;
 
 export interface ReplayPoint {
   x: number;
@@ -79,7 +79,7 @@ export function buildTimeline(track: StoredTrack, segments: Segment[], terrain: 
       if (activity === "run") vertical += Math.max(0, raw[i - 1].ele - r.ele);
     }
     if (activity === "run") runsCompleted.add(seg);
-    const place = activity === "lift" ? names.lift(x, z) : activity === "run" ? names.run(x, z) : null;
+    const place = activity === "lift" ? (names.lift(x, z)?.name ?? null) : activity === "run" ? (names.run(x, z)?.name ?? null) : null;
     points.push({ x, y, z, t: r.t, p, activity, place, verticalM: vertical, segment: seg });
   });
 
@@ -102,40 +102,4 @@ export function indexAt(points: ReplayPoint[], p: number): number {
     else hi = mid - 1;
   }
   return lo;
-}
-
-/** Nearest named run / lift lookups on a coarse spatial grid. */
-function nameIndex(data: MountainData, terrain: Terrain) {
-  const CELL = 120;
-  const build = (lines: { name: string | null; coords: [number, number][] }[]) => {
-    const grid = new Map<string, { name: string; x: number; z: number }[]>();
-    for (const l of lines) {
-      if (!l.name) continue;
-      for (const [x, z] of densify(
-        l.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)),
-        15,
-      )) {
-        const key = `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
-        if (!grid.has(key)) grid.set(key, []);
-        grid.get(key)!.push({ name: l.name, x, z });
-      }
-    }
-    return (x: number, z: number) => {
-      let best: string | null = null;
-      let bestD = NAME_RADIUS_M;
-      const cx = Math.floor(x / CELL);
-      const cz = Math.floor(z / CELL);
-      for (let dx = -1; dx <= 1; dx++)
-        for (let dz = -1; dz <= 1; dz++)
-          for (const v of grid.get(`${cx + dx},${cz + dz}`) ?? []) {
-            const d = Math.hypot(v.x - x, v.z - z);
-            if (d < bestD) {
-              bestD = d;
-              best = v.name;
-            }
-          }
-      return best;
-    };
-  };
-  return { run: build(data.runs), lift: build(data.lifts) };
 }

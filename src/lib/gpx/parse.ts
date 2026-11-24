@@ -3,7 +3,11 @@ import type { TrackPoint } from "../analysis/types";
 
 export class GpxError extends Error {}
 
-type RawPoint = { lat?: string; lon?: string; ele?: string | number; time?: string };
+type Ext = { speed?: string | number; hAcc?: string | number; TrackPointExtension?: { speed?: string | number } };
+type RawPoint = { lat?: string; lon?: string; ele?: string | number; time?: string; extensions?: Ext };
+
+/** Fixes worse than this (Apple's hAcc, metres) are dropped: they're the jumps that fake speed records. */
+const MAX_H_ACCURACY_M = 50;
 type GpxDoc = { gpx?: { trk?: { trkseg?: { trkpt?: RawPoint[] }[] }[] } };
 
 const parser = new XMLParser({
@@ -35,7 +39,12 @@ export function parseGpx(xml: string): TrackPoint[] {
     const lon = Number(p.lon);
     const ele = Number(p.ele);
     const t = Date.parse(p.time ?? "");
-    if ([lat, lon, ele, t].every(Number.isFinite)) points.push({ t, lat, lon, ele });
+    if (![lat, lon, ele, t].every(Number.isFinite)) continue;
+    const ext = p.extensions;
+    if (ext && Number(ext.hAcc) > MAX_H_ACCURACY_M) continue;
+    // Apple Watch / iPhone routes: <extensions><speed>; Garmin: <gpxtpx:TrackPointExtension><gpxtpx:speed>
+    const speed = Number(ext?.speed ?? ext?.TrackPointExtension?.speed);
+    points.push(Number.isFinite(speed) && speed >= 0 ? { t, lat, lon, ele, speed } : { t, lat, lon, ele });
   }
 
   if (points.length === 0) {

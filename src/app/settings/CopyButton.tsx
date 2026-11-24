@@ -7,7 +7,7 @@ export function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="btn-ghost shrink-0 px-4! py-2!"
+      className="btn-ghost shrink-0"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -18,7 +18,7 @@ export function CopyButton({ text }: { text: string }) {
         }
       }}
     >
-      {copied ? "Copied ✓" : "Copy"}
+      {copied ? "Copied" : "Copy"}
     </button>
   );
 }

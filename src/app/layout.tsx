@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import { Fredoka, Nunito } from "next/font/google";
+import { Upload } from "lucide-react";
+import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Logo } from "@/components/Art";
+import { NavLink } from "@/components/NavLink";
 import { currentUser } from "@/lib/auth";
 import { APP_NAME, TAGLINE } from "@/lib/brand";
 import "./globals.css";
 
-const fredoka = Fredoka({ variable: "--font-fredoka", subsets: ["latin"], weight: ["500", "600", "700"] });
-const nunito = Nunito({ variable: "--font-nunito", subsets: ["latin"] });
+const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = { title: APP_NAME, description: TAGLINE };
 
@@ -16,38 +18,43 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const user = await currentUser();
   return (
     <html lang="en">
-      <body className={`${fredoka.variable} ${nunito.variable} antialiased`}>
-        <header className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4">
-          <Link href="/" className="flex items-center gap-2 font-display text-xl font-bold">
-            <Logo className="h-9 w-9" />
-            <span className="hidden sm:inline">{APP_NAME}</span>
-          </Link>
-          <nav className="flex items-center gap-1 text-[15px] font-semibold text-ink-soft">
-            <Link href="/leaderboard" className="rounded-full px-3 py-1.5 hover:bg-white hover:text-ink">
-              Leaderboard
+      <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
+        <header className="sticky top-0 z-30 border-b border-line/70 bg-bg/80 backdrop-blur-xl">
+          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+            <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+              <Logo className="h-7 w-7" />
+              <span className="hidden sm:inline">{APP_NAME}</span>
             </Link>
-            {user ? (
-              <>
-                <Link href="/upload" className="rounded-full px-3 py-1.5 hover:bg-white hover:text-ink">
-                  Upload
+            <nav className="flex items-center gap-0.5 text-[13px] sm:text-sm">
+              {user && (
+                <span className="hidden sm:inline">
+                  <NavLink href="/">Feed</NavLink>
+                </span>
+              )}
+              <NavLink href="/leaderboard">Leaderboard</NavLink>
+              <NavLink href="/mountains">3D</NavLink>
+              {user ? (
+                <>
+                  <NavLink href={`/u/${user.username}`}>Stats</NavLink>
+                  <Link href="/upload" className="btn-primary ml-1.5 px-2.5! py-1.5! sm:ml-2 sm:px-3!" aria-label="Upload">
+                    <Upload size={14} aria-hidden className="sm:hidden" />
+                    <span className="hidden sm:inline">Upload</span>
+                  </Link>
+                  <Link href="/settings" className="ml-1.5 sm:ml-2" aria-label="Settings">
+                    <Avatar user={user} size={30} />
+                  </Link>
+                </>
+              ) : (
+                <Link href="/login" className="btn-primary ml-2 px-3! py-1.5!">
+                  Sign in
                 </Link>
-                <Link href="/settings" className="rounded-full px-3 py-1.5 hover:bg-white hover:text-ink">
-                  Settings
-                </Link>
-                <Link href={`/u/${user.username}`} className="ml-1" aria-label="Your profile">
-                  <Avatar user={user} size={36} />
-                </Link>
-              </>
-            ) : (
-              <Link href="/login" className="btn-primary ml-1 px-4! py-1.5!">
-                Join
-              </Link>
-            )}
-          </nav>
+              )}
+            </nav>
+          </div>
         </header>
-        <main className="mx-auto max-w-5xl px-4 pb-16">{children}</main>
-        <footer className="mx-auto max-w-5xl px-4 pb-8 text-xs text-ink-soft">
-          Resort boundaries © <a className="underline" href="https://openskimap.org">OpenSkiMap</a> / OpenStreetMap contributors (ODbL).
+        <main className="mx-auto max-w-6xl px-4 pt-6 pb-20">{children}</main>
+        <footer className="mx-auto max-w-6xl border-t border-line px-4 py-6 text-xs text-ink-faint">
+          Resort boundaries © <a className="underline hover:text-ink-soft" href="https://openskimap.org">OpenSkiMap</a> / OpenStreetMap contributors (ODbL).
         </footer>
       </body>
     </html>

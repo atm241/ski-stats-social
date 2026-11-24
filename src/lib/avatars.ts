@@ -1,11 +1,20 @@
-export const AVATAR_EMOJI = ["⛷️", "🏂", "🐧", "🦊", "🐻‍❄️", "🐐", "🦉", "🐰", "🐱", "🦭", "🏔️", "❄️"];
-
-/** Background colors for avatar bubbles; keys are stored on User.color. */
+/** Accent colours for monogram avatars; keys are stored on User.color. */
 export const AVATAR_COLORS: Record<string, string> = {
-  sky: "#bfe3ff",
-  berry: "#ffc9da",
-  mint: "#bdf0de",
-  sun: "#ffe7a8",
-  lilac: "#dcd2ff",
-  peach: "#ffd6bf",
+  sky: "#5cc8ff",
+  berry: "#f472b6",
+  mint: "#34d399",
+  sun: "#fbbf24",
+  lilac: "#a78bfa",
+  peach: "#fb923c",
 };
+
+export const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
+
+/** Legacy: User.avatar still stores one of these (the UI now shows monograms). */
+export const AVATAR_EMOJI = ["⛷️", "🏂", "🐧", "🦊", "🐻‍❄️", "🐐", "🦉", "🐰", "🐱", "🦭", "🏔️", "❄️"];

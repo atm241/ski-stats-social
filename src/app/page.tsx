@@ -1,104 +1,129 @@
+import { ArrowDownRight, ArrowRight, Box, CalendarDays, Gauge, MapPin, Trophy } from "lucide-react";
 import Link from "next/link";
-import { MountainHero } from "@/components/Art";
 import { DayCard } from "@/components/DayCard";
 import { LeaderboardList } from "@/components/LeaderboardList";
 import { MilestoneBar } from "@/components/MilestoneBar";
-import { StatTile } from "@/components/StatTile";
+import { SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
 import { APP_NAME, TAGLINE } from "@/lib/brand";
 import { prisma } from "@/lib/db";
 import { leaderboard, seasonsWithData, totals } from "@/lib/days";
-import { feet } from "@/lib/format";
+import { feet, mph } from "@/lib/format";
+import { listMountains } from "@/lib/mountain/registry";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
+import { followingIds } from "@/lib/social";
 
 export default async function Home() {
-  const [me, seasons] = await Promise.all([currentUser(), seasonsWithData()]);
+  const [me, seasons, mountains] = await Promise.all([currentUser(), seasonsWithData(), listMountains()]);
   const season = seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
-  const [board, recent, myDays] = await Promise.all([
+  const friends = me ? await followingIds(me.id) : [];
+  const feedUsers = me && friends.length ? [me.id, ...friends] : null;
+  const [board, feed, myDays] = await Promise.all([
     leaderboard(season, "vertical"),
-    prisma.skiDay.findMany({ orderBy: [{ createdAt: "desc" }, { startedAt: "desc" }], take: 6, include: { user: true } }),
+    prisma.skiDay.findMany({
+      where: feedUsers ? { userId: { in: feedUsers } } : undefined,
+      orderBy: [{ localDate: "desc" }, { startedAt: "desc" }],
+      take: 12,
+      include: { user: true },
+    }),
     me ? prisma.skiDay.findMany({ where: { userId: me.id, seasonKey: season, flagged: false } }) : Promise.resolve([]),
   ]);
   const t = totals(myDays);
   const myRank = me ? board.find((r) => r.user.id === me.id)?.rank : undefined;
+  const top = Math.max(0, ...myDays.map((d) => d.maxSpeedMps));
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-4xl bg-linear-to-b from-[#bfe0ff] to-[#e8f3ff] px-6 pt-8 pb-36 sm:px-10 sm:pb-44">
-        <MountainHero className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full sm:h-52" />
-        <div className="relative max-w-lg">
-          {me ? (
-            <>
-              <p className="font-semibold text-sky-deep">
-                {seasonLabel(season)} season {myRank ? `· #${myRank} worldwide` : ""}
-              </p>
-              <h1 className="font-display text-4xl font-bold sm:text-5xl">Hey {me.displayName} {me.avatar}</h1>
-              <p className="mt-2 text-lg text-ink-soft">{t.days ? `${feet(t.verticalM)} ft of vertical across ${t.days} days. Keep sending.` : "Upload your first day to get on the board."}</p>
-              <Link href="/upload" className="btn-primary mt-5">
+    <div className="space-y-10">
+      {me ? (
+        <section className="card overflow-hidden">
+          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line px-5 py-4">
+            <div>
+              <div className="label">{seasonLabel(season)} season</div>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight">Welcome back, {me.displayName.split(" ")[0]}</h1>
+            </div>
+            <div className="flex gap-2">
+              <Link href={`/u/${me.username}`} className="btn-ghost">
+                Season stats
+              </Link>
+              <Link href="/upload" className="btn-primary">
                 Upload a day
               </Link>
-            </>
-          ) : (
-            <>
-              <h1 className="font-display text-4xl font-bold sm:text-5xl">{APP_NAME}</h1>
-              <p className="mt-2 text-lg text-ink-soft">{TAGLINE} Upload from Slopes, Garmin, Strava or your watch.</p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Link href="/login" className="btn-primary">
-                  Make your skier
-                </Link>
-                <Link href="/leaderboard" className="btn-ghost">
-                  See the leaderboard
-                </Link>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      {me && (
-        <section className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile icon="⛰️" label="Vertical" value={feet(t.verticalM)} unit="ft" tone="sky" />
-            <StatTile icon="📅" label="Days" value={String(t.days)} tone="berry" />
-            <StatTile icon="🗺️" label="Resorts" value={String(t.resorts)} tone="lilac" />
-            <StatTile icon="🥾" label="Uphill" value={feet(t.uphillM)} unit="ft" tone="sun" />
+            </div>
           </div>
-          <MilestoneBar verticalM={t.verticalM} />
+          <div className="grid grid-cols-2 gap-6 p-5 sm:grid-cols-5">
+            <div className="col-span-2">
+              <Stat label="Vertical" value={feet(t.verticalM)} unit="ft" icon={ArrowDownRight} accent="var(--color-vert)" size="lg" />
+            </div>
+            <Stat label="Days" value={String(t.days)} icon={CalendarDays} />
+            <Stat label="Top speed" value={mph(top)} unit="mph" icon={Gauge} accent="var(--color-speed)" />
+            <Stat label="World rank" value={myRank ? `#${myRank}` : "–"} icon={Trophy} sub={myRank ? `of ${board.length}` : "Upload to rank"} />
+          </div>
+          <div className="border-t border-line px-5 py-4">
+            <MilestoneBar verticalM={t.verticalM} />
+          </div>
+        </section>
+      ) : (
+        <section className="relative overflow-hidden rounded-2xl border border-line bg-surface px-6 py-14 sm:px-12">
+          <div className="pointer-events-none absolute -top-24 -right-24 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
+          <div className="relative max-w-xl">
+            <div className="label text-accent">Every turn, counted</div>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">{APP_NAME}</h1>
+            <p className="mt-4 text-lg text-ink-soft">{TAGLINE} Import from Slopes, Garmin, Strava or any GPX file and get run-by-run stats, named trails and a 3D replay of your day.</p>
+            <div className="mt-8 flex flex-wrap gap-2">
+              <Link href="/login" className="btn-primary">
+                Get started <ArrowRight size={15} aria-hidden />
+              </Link>
+              <Link href="/leaderboard" className="btn-ghost">
+                Leaderboard
+              </Link>
+            </div>
+          </div>
         </section>
       )}
 
-      <Link href="/mountains/deer-valley" className="card flex items-center gap-4 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-soft text-2xl" aria-hidden>
-          🏔️
-        </span>
-        <span className="flex-1">
-          <span className="block font-display text-lg font-semibold">Explore Deer Valley in 3D</span>
-          <span className="text-sm text-ink-soft">Every run and lift on a little low-poly mountain. Day replays are coming next.</span>
-        </span>
-        <span className="font-bold text-sky-deep" aria-hidden>
-          →
-        </span>
-      </Link>
-
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section>
-          <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="font-display text-xl font-semibold">Top vert · {seasonLabel(season)}</h2>
-            <Link href="/leaderboard" className="text-sm font-bold text-sky-deep hover:underline">
-              Full board →
-            </Link>
-          </div>
-          <LeaderboardList rows={board} metric="vertical" meId={me?.id} limit={5} />
-        </section>
-        <section>
-          <h2 className="mb-2 font-display text-xl font-semibold">Fresh tracks</h2>
-          <div className="space-y-2">
-            {recent.map((d) => (
+          <SectionTitle right={feedUsers ? "You and people you follow" : "Everyone"}>Recent days</SectionTitle>
+          <div className="card divide-y divide-line overflow-hidden">
+            {feed.map((d) => (
               <DayCard key={d.id} day={d} user={d.user} />
             ))}
-            {recent.length === 0 && <p className="card p-6 text-center text-ink-soft">Nothing yet.</p>}
+            {feed.length === 0 && <p className="p-6 text-center text-sm text-ink-soft">Nothing yet.</p>}
           </div>
+          {me && !friends.length && <p className="mt-3 text-xs text-ink-faint">Follow skiers from their profile to make this your friends feed.</p>}
         </section>
+
+        <aside className="space-y-8">
+          <section>
+            <SectionTitle
+              right={
+                <Link href="/leaderboard" className="hover:text-ink">
+                  All →
+                </Link>
+              }
+            >
+              Top vertical · {seasonLabel(season)}
+            </SectionTitle>
+            <LeaderboardList rows={board} metric="vertical" meId={me?.id} limit={5} compact />
+          </section>
+
+          {mountains.length > 0 && (
+            <section>
+              <SectionTitle>3D mountains</SectionTitle>
+              <ul className="card divide-y divide-line overflow-hidden">
+                {mountains.map((m) => (
+                  <li key={m.slug}>
+                    <Link href={`/mountains/${m.slug}`} className="flex items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-raised">
+                      <Box size={15} className="shrink-0 text-accent" aria-hidden />
+                      <span className="flex-1">{m.name}</span>
+                      <MapPin size={13} className="text-ink-faint" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </aside>
       </div>
     </div>
   );

@@ -1,50 +1,89 @@
 @import "tailwindcss";
 
+/*
+ * Dark, data-first theme. One accent (ice blue), neutral surfaces stepping up in lightness,
+ * and a small set of data colours used consistently across charts and stats.
+ */
 @theme {
-  --color-snow: #f3f7ff;
-  --color-ink: #1f2b4d;
-  --color-ink-soft: #5d6a8c;
-  --color-line: #e3e9f6;
-  --color-sky: #5ab4ff;
-  --color-sky-deep: #2f7fe0;
-  --color-sky-soft: #e3f2ff;
-  --color-berry: #ff6b9a;
-  --color-berry-soft: #ffe4ed;
-  --color-mint: #34c49a;
-  --color-mint-soft: #ddf7ee;
-  --color-sun: #ffbf3c;
-  --color-sun-soft: #fff3d6;
-  --color-lilac: #9a85ff;
-  --color-lilac-soft: #ece8ff;
+  --color-bg: #090b10;
+  --color-surface: #10141b;
+  --color-raised: #171c25;
+  --color-hover: #1d2330;
+  --color-line: #222936;
+  --color-line-strong: #2e3646;
 
-  --font-display: var(--font-fredoka), ui-rounded, system-ui, sans-serif;
-  --font-sans: var(--font-nunito), ui-rounded, system-ui, sans-serif;
+  --color-ink: #e8edf5;
+  --color-ink-soft: #8b95a8;
+  --color-ink-faint: #5d6678;
 
-  --shadow-card: 0 1px 0 rgb(31 43 77 / 0.04), 0 8px 24px -12px rgb(31 43 77 / 0.18);
+  --color-accent: #5cc8ff;
+  --color-accent-strong: #2eb4f5;
+  --color-accent-dim: rgb(92 200 255 / 0.12);
+
+  /* data colours */
+  --color-vert: #5cc8ff;
+  --color-speed: #ff7a59;
+  --color-lift: #a78bfa;
+  --color-uphill: #fbbf24;
+  --color-good: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+
+  /* trail difficulty (North American) */
+  --color-green-run: #34d399;
+  --color-blue-run: #3b82f6;
+  --color-black-run: #e5e7eb;
+  --color-orange-run: #fb923c;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* kept so older markup using font-display still renders in the new face */
+  --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -16px rgb(0 0 0 / 0.6);
+}
+
+:root {
+  color-scheme: dark;
 }
 
 body {
-  background: linear-gradient(180deg, #e6f1ff 0px, var(--color-snow) 420px);
-  background-color: var(--color-snow);
+  background:
+    radial-gradient(1200px 500px at 70% -200px, rgb(92 200 255 / 0.08), transparent 70%),
+    var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: rgb(92 200 255 / 0.3);
 }
 
 @utility card {
-  @apply rounded-3xl border border-line bg-white shadow-card;
+  @apply rounded-2xl border border-line bg-surface shadow-card;
+}
+@utility card-raised {
+  @apply rounded-xl border border-line bg-raised;
 }
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 font-display text-[15px] font-semibold transition active:translate-y-px;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-sky-deep text-white shadow-[0_4px_0_#1f5fb0] hover:bg-[#2a74cf];
+  @apply btn bg-accent text-bg hover:bg-accent-strong;
 }
 @utility btn-ghost {
-  @apply btn bg-white text-ink ring-1 ring-line hover:bg-sky-soft;
+  @apply btn border border-line bg-raised text-ink hover:border-line-strong hover:bg-hover;
 }
 @utility chip {
-  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold;
+  @apply inline-flex items-center gap-1 rounded-md border border-line bg-raised px-2 py-0.5 text-xs font-medium text-ink-soft;
 }
 @utility input {
-  @apply w-full rounded-2xl border border-line bg-white px-4 py-2.5 outline-none focus:border-sky focus:ring-4 focus:ring-sky/20;
+  @apply w-full rounded-lg border border-line bg-raised px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent focus:ring-2 focus:ring-accent/25;
+}
+@utility label {
+  @apply text-[11px] font-medium tracking-[0.08em] text-ink-soft uppercase;
+}
+@utility num {
+  @apply font-mono tabular-nums tracking-tight;
 }

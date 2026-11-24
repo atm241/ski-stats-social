@@ -44,3 +44,9 @@ next-env.d.ts
 /prisma/*.db
 /prisma/*.db-journal
 !.env.example
+/.cache
+
+# Xcode
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/**/DerivedData/

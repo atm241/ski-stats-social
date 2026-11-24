@@ -1,16 +1,20 @@
+import { ArrowDownRight, Gauge, Mountain, Play, Route, Timer, TrendingUp, Armchair, Hash } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteDay } from "@/app/actions";
 import { Avatar } from "@/components/Avatar";
-import { KIND_CHIP } from "@/components/DayCard";
 import { DayBreakdown } from "@/components/DayBreakdown";
-import { DayViz } from "@/components/DayViz";
-import { StatTile } from "@/components/StatTile";
+import { DayExplorer } from "@/components/DayExplorer";
+import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, normDifficulty, SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { dayDetail } from "@/lib/days";
-import { mountainSlugForResort } from "@/lib/mountain/registry";
 import { clockTime, duration, feet, miles, mph, prettyDate } from "@/lib/format";
+import { loadMountain, mountainSlugForResort } from "@/lib/mountain/registry";
+import { skiedWith } from "@/lib/social";
+import { labelSegments } from "@/lib/trails";
+
+const KIND_LABEL: Record<string, string> = { resort: "Resort", backcountry: "Backcountry", mixed: "Resort + uphill" };
 
 export default async function DayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,94 +22,163 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
   if (!day) notFound();
 
   const { track, segments, flagReasons } = dayDetail(day);
-  const hasReplay = !!(await mountainSlugForResort(day.resortName));
-  const runs = segments.filter((s) => s.kind === "run");
-  const chip = KIND_CHIP[day.kind] ?? KIND_CHIP.resort;
+  const slug = await mountainSlugForResort(day.resortName);
+  const labels = slug ? labelSegments(track, segments, await loadMountain(slug)) : segments.map(() => null);
+  const companions = await skiedWith(day);
   const isMine = me?.id === day.userId;
 
+  const runs = segments.flatMap((s, i) => (s.kind === "run" ? [{ s, l: labels[i] }] : []));
+  const avgRunSpeed = day.skiTimeS > 0 ? day.distanceM / day.skiTimeS : 0;
+  // difficulty mix by vertical, and most-skied trails / lifts
+  const byDiff = new Map<string, number>();
+  const trailCount = new Map<string, { n: number; difficulty: string | null }>();
+  for (const { s, l } of runs) {
+    const d = normDifficulty(l?.difficulty);
+    if (d) byDiff.set(d, (byDiff.get(d) ?? 0) + s.verticalM);
+    if (l) for (const n of l.names) trailCount.set(n, { n: (trailCount.get(n)?.n ?? 0) + 1, difficulty: n === l.name ? l.difficulty : (trailCount.get(n)?.difficulty ?? null) });
+  }
+  const liftCount = new Map<string, number>();
+  segments.forEach((s, i) => s.kind === "lift" && labels[i] && liftCount.set(labels[i]!.name, (liftCount.get(labels[i]!.name) ?? 0) + 1));
+  const diffTotal = [...byDiff.values()].reduce((a, b) => a + b, 0);
+  const topTrails = [...trailCount.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 6);
+  const topLifts = [...liftCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+
   return (
-    <div className="space-y-5 pt-2">
-      <div className="flex flex-wrap items-center gap-4">
-        <Link href={`/u/${day.user.username}`}>
-          <Avatar user={day.user} size={56} />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-ink-soft">
-            <Link href={`/u/${day.user.username}`} className="hover:underline">
-              {day.user.displayName}
-            </Link>{" "}
-            · {prettyDate(day.localDate)}
-          </div>
-          <h1 className="font-display text-3xl font-bold">{day.resortName ?? (day.uphillM > 0 ? "Backcountry tour" : "Backcountry laps")}</h1>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <span className={`chip ${chip.className}`}>{chip.label}</span>
-            {day.resortCountry && <span className="chip bg-white text-ink-soft ring-1 ring-line">{day.resortCountry}</span>}
-            <span className="chip bg-white text-ink-soft ring-1 ring-line">
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <Link href={`/u/${day.user.username}`} className="flex items-center gap-2 text-sm text-ink-soft hover:text-ink">
+            <Avatar user={day.user} size={22} />
+            {day.user.displayName} · {prettyDate(day.localDate)}
+          </Link>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{day.resortName ?? (day.uphillM > 0 ? "Backcountry tour" : "Backcountry laps")}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="chip">{KIND_LABEL[day.kind] ?? "Resort"}</span>
+            {day.resortCountry && <span className="chip">{day.resortCountry}</span>}
+            <span className="chip num">
               {clockTime(day.startedAt, day.timezone)} – {clockTime(day.endedAt, day.timezone)}
             </span>
           </div>
         </div>
-        {hasReplay && (
+        {slug && (
           <Link href={`/days/${day.id}/replay`} className="btn-primary">
-            ▶ Watch 3D replay
+            <Play size={15} fill="currentColor" aria-hidden /> 3D replay
           </Link>
         )}
-      </div>
+      </header>
 
       {day.flagged && (
-        <div className="rounded-3xl bg-sun-soft p-4 text-sm text-[#7a5500]">
-          <strong>Not on the leaderboard yet.</strong> {flagReasons.join(" ")}
+        <div className="rounded-xl border border-warn/30 bg-warn/10 p-4 text-sm text-warn">
+          <strong className="font-semibold">Not on the leaderboard yet.</strong> <span className="text-ink-soft">{flagReasons.join(" ")}</span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon="⛰️" label="Vertical" value={feet(day.verticalM)} unit="ft" tone="sky" />
-        <StatTile icon="🎿" label="Runs" value={String(day.runCount)} tone="berry" />
+      <section className="card grid grid-cols-2 gap-x-6 gap-y-6 p-5 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="col-span-2">
+          <Stat label="Vertical" value={feet(day.verticalM)} unit="ft" icon={ArrowDownRight} accent="var(--color-vert)" size="lg" />
+        </div>
+        <Stat label="Runs" value={String(day.runCount)} icon={Hash} />
+        <Stat label="Top speed" value={mph(day.maxSpeedMps)} unit="mph" icon={Gauge} accent="var(--color-speed)" />
+        <Stat label="Distance" value={miles(day.distanceM)} unit="mi" icon={Route} />
+        <Stat label="Ski time" value={duration(day.skiTimeS * 1000)} icon={Timer} />
         {day.uphillM > 0 ? (
-          <StatTile icon="🥾" label="Uphill" value={feet(day.uphillM)} unit="ft" tone="sun" />
+          <Stat label="Uphill" value={feet(day.uphillM)} unit="ft" icon={TrendingUp} accent="var(--color-uphill)" />
         ) : (
-          <StatTile icon="🚡" label="Lifts" value={String(day.liftCount)} tone="lilac" />
+          <Stat label="Lifts" value={String(day.liftCount)} icon={Armchair} accent="var(--color-lift)" />
         )}
-        <StatTile icon="⚡" label="Top speed" value={mph(day.maxSpeedMps)} unit="mph" tone="mint" />
+        <Stat label="Peak" value={feet(day.peakEleM)} unit="ft" icon={Mountain} />
+      </section>
+
+      <DayExplorer track={track} segments={segments} labels={labels} timeZone={day.timezone} />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="card p-5">
+          <SectionTitle>Where the day went</SectionTitle>
+          <DayBreakdown day={day} />
+          <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-line pt-4">
+            <Stat size="sm" label="Avg run speed" value={mph(avgRunSpeed)} unit="mph" />
+            <Stat size="sm" label="Longest run" value={miles(day.longestRunM)} unit="mi" />
+            <Stat size="sm" label="Tallest run" value={feet(day.tallestRunM)} unit="ft" />
+          </dl>
+        </section>
+
+        <section className="card p-5">
+          <SectionTitle right={slug ? undefined : "Trail names need a mapped resort"}>Trails</SectionTitle>
+          {diffTotal > 0 ? (
+            <>
+              <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+                {DIFFICULTY_ORDER.filter((d) => byDiff.get(d)).map((d) => (
+                  <div key={d} style={{ flexGrow: byDiff.get(d), background: DIFFICULTY_COLOR[d] }} title={DIFFICULTY_NAME[d]} />
+                ))}
+              </div>
+              <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                {DIFFICULTY_ORDER.filter((d) => byDiff.get(d)).map((d) => (
+                  <li key={d} className="flex items-center gap-2">
+                    <Difficulty level={d} size={10} />
+                    <span className="text-ink-soft">{DIFFICULTY_NAME[d]}</span>
+                    <span className="num">{Math.round((byDiff.get(d)! / diffTotal) * 100)}%</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-5 grid grid-cols-2 gap-6 border-t border-line pt-4 text-sm">
+                <div>
+                  <div className="label mb-2">Most skied</div>
+                  <ul className="space-y-1.5">
+                    {topTrails.map(([name, v]) => (
+                      <li key={name} className="flex items-center gap-2">
+                        <Difficulty level={v.difficulty} size={10} />
+                        <span className="truncate">{name}</span>
+                        <span className="num ml-auto text-ink-soft">×{v.n}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="label mb-2">Lifts</div>
+                  <ul className="space-y-1.5">
+                    {topLifts.map(([name, n]) => (
+                      <li key={name} className="flex items-center gap-2">
+                        <Armchair size={12} className="shrink-0 text-lift" aria-hidden />
+                        <span className="truncate">{name}</span>
+                        <span className="num ml-auto text-ink-soft">×{n}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-ink-soft">
+              {slug ? "No named trails matched this track." : `We don't have a trail map for ${day.resortName ?? "this area"} yet, so runs are numbered instead of named.`}
+            </p>
+          )}
+        </section>
       </div>
 
-      <DayViz track={track} segments={segments} timeZone={day.timezone} />
-
-      <DayBreakdown day={day} />
-
-      <section className="card overflow-hidden">
-        <h2 className="px-5 pt-4 font-display text-lg font-semibold">Runs</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead className="text-left text-xs tracking-wide text-ink-soft uppercase">
-              <tr>
-                <th className="px-5 py-2 font-bold">#</th>
-                <th className="px-2 py-2 font-bold">Start</th>
-                <th className="px-2 py-2 text-right font-bold">Vertical</th>
-                <th className="px-2 py-2 text-right font-bold">Distance</th>
-                <th className="px-2 py-2 text-right font-bold">Time</th>
-                <th className="px-5 py-2 text-right font-bold">Top speed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line tabular-nums">
-              {runs.map((r, i) => (
-                <tr key={r.startT}>
-                  <td className="px-5 py-2 font-display font-semibold text-sky-deep">{i + 1}</td>
-                  <td className="px-2 py-2">{clockTime(r.startT, day.timezone)}</td>
-                  <td className="px-2 py-2 text-right font-semibold">{feet(r.verticalM)} ft</td>
-                  <td className="px-2 py-2 text-right">{miles(r.distanceM)} mi</td>
-                  <td className="px-2 py-2 text-right">{duration(r.endT - r.startT)}</td>
-                  <td className="px-5 py-2 text-right">{mph(r.maxSpeedMps)} mph</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {companions.length > 0 && (
+        <section className="card p-5">
+          <SectionTitle>Skied with</SectionTitle>
+          <ul className="flex flex-wrap gap-3">
+            {companions.map((c) => (
+              <li key={c.day.id}>
+                <Link href={`/days/${c.day.id}`} className="card-raised flex items-center gap-3 px-3 py-2 hover:border-line-strong">
+                  <Avatar user={c.user} size={30} />
+                  <div className="text-sm">
+                    <div className="font-medium">{c.user.displayName}</div>
+                    <div className="num text-xs text-ink-soft">
+                      {c.sharedLifts} shared {c.sharedLifts === 1 ? "lift" : "lifts"} · {feet(c.day.verticalM)} ft
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {isMine && (
         <form action={deleteDay.bind(null, day.id)} className="text-right">
-          <button className="text-sm font-semibold text-ink-soft hover:text-berry">Delete this day</button>
+          <button className="text-sm text-ink-faint hover:text-bad">Delete this day</button>
         </form>
       )}
     </div>

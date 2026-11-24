@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { verifyLogin } from "@/app/actions";
+import { Logo } from "@/components/Art";
 import { APP_NAME } from "@/lib/brand";
 
 /**
@@ -9,14 +10,12 @@ import { APP_NAME } from "@/lib/brand";
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { token } = await searchParams;
   return (
-    <div className="mx-auto max-w-md pt-10">
-      <div className="card space-y-4 p-6 text-center">
-        <div className="text-5xl" aria-hidden>
-          🎿
-        </div>
+    <div className="mx-auto max-w-sm pt-14">
+      <div className="card space-y-5 p-6 text-center">
+        <Logo className="mx-auto h-10 w-10" />
         {token ? (
           <form action={verifyLogin} className="space-y-4">
-            <h1 className="font-display text-2xl font-bold">Sign in to {APP_NAME}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Sign in to {APP_NAME}</h1>
             <input type="hidden" name="token" value={token} />
             <button type="submit" className="btn-primary w-full">
               Continue
@@ -24,7 +23,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
           </form>
         ) : (
           <>
-            <h1 className="font-display text-2xl font-bold">Link is missing its token</h1>
+            <h1 className="text-xl font-semibold tracking-tight">This link is missing its token</h1>
             <Link href="/login" className="btn-ghost">
               Get a new link
             </Link>

@@ -133,6 +133,18 @@ export function analyzeDay(points: TrackPoint[]): DayStats {
   }
 
   const maxSpeedBetween = (a: number, b: number) => {
+    // Prefer the device's own speed (GPS Doppler, far more precise than position deltas) when most
+    // points have it. Median of three neighbours so one bad sample can't set a record.
+    let withSpeed = 0;
+    for (let i = a; i <= b; i++) if (points[i].speed !== undefined) withSpeed++;
+    if (b - a >= 4 && withSpeed >= (b - a + 1) * 0.6) {
+      let top = 0;
+      for (let i = a + 1; i < b; i++) {
+        const v = [points[i - 1].speed, points[i].speed, points[i + 1].speed].map((x) => x ?? 0).sort((p, q) => p - q)[1];
+        if (v < GLITCH_SPEED && v > top) top = v;
+      }
+      return top;
+    }
     let best = 0;
     let j = a;
     for (let i = a; i < b; i++) {

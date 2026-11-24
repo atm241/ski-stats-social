@@ -24,7 +24,9 @@ type Trip =
   | { resorts: string[]; days: number; from: string }
   | { backcountry: [number, number, number]; days: number; from: string }
   /** real lift & run network from public/mountains/<slug>.json, so the day can be replayed in 3D */
-  | { mountain: string; days: number; from: string };
+  | { mountain: string; days: number; from: string }
+  /** ride along with another demo skier's mountain days (same route, `lagS` behind), for "Skied with" */
+  | { mountain: string; days: number; withUser: string; lagS: number };
 
 const mountain = (slug: string) => JSON.parse(readFileSync(`public/mountains/${slug}.json`, "utf8")) as MountainData;
 
@@ -112,9 +114,23 @@ const SKIERS: { username: string; displayName: string; avatar: string; color: st
     displayName: "Dana",
     avatar: "🦊",
     color: "sky",
-    trips: [{ mountain: "deer-valley", days: 6, from: "2026-01-10" }],
+    trips: [
+      { mountain: "deer-valley", days: 6, from: "2026-01-10" },
+      { mountain: "snowbird-alta", days: 3, from: "2026-02-14" },
+      { mountain: "park-city", days: 3, from: "2026-03-06" },
+    ],
+  },
+  {
+    username: "alex",
+    displayName: "Alex Moreno",
+    avatar: "🏂",
+    color: "peach",
+    trips: [{ mountain: "snowbird-alta", days: 2, withUser: "dana", lagS: 50 }],
   },
 ];
+
+/** Mountain days already generated per "user:slug", so a buddy can replay the same route. */
+const generatedDays = new Map<string, { date: string; start: Date; seed: number; laps: number }[]>();
 
 function addDays(date: string, n: number) {
   const d = new Date(`${date}T12:00:00Z`);
@@ -132,16 +148,25 @@ async function main() {
     let saved = 0;
     for (const trip of s.trips) {
       const rand = rng(seed++);
-      let date = trip.from;
+      let date = "from" in trip ? trip.from : "";
       for (let i = 0; i < trip.days; i++) {
-        date = addDays(date, 1 + Math.floor(rand() * 3));
+        const along = "withUser" in trip ? generatedDays.get(`${trip.withUser}:${trip.mountain}`)?.[i] : undefined;
+        if ("withUser" in trip && !along) break;
+        date = along ? along.date : addDays(date, 1 + Math.floor(rand() * 3));
         const lon = "resorts" in trip ? resort(trip.resorts[i % trip.resorts.length]).center[0] : "backcountry" in trip ? trip.backcountry[1] : -111.5;
         // ~9am local, approximated from longitude
         const start = new Date(new Date(`${date}T09:00:00Z`).getTime() - (lon / 15) * 3600_000);
 
         let points;
         if ("mountain" in trip) {
-          points = mountainDay(mountain(trip.mountain), { start, seed: seed++, laps: 7 + Math.floor(rand() * 6) }).points;
+          const params = along
+            ? { start: new Date(along.start.getTime() + ("lagS" in trip ? trip.lagS : 0) * 1000), seed: along.seed, laps: along.laps }
+            : { start, seed: seed++, laps: 7 + Math.floor(rand() * 6) };
+          if (!along) {
+            const key = `${s.username}:${trip.mountain}`;
+            generatedDays.set(key, [...(generatedDays.get(key) ?? []), { date, ...params }]);
+          }
+          points = mountainDay(mountain(trip.mountain), params).points;
         } else if ("resorts" in trip) {
           const r = resort(trip.resorts[i % trip.resorts.length]);
           const span = (r.maxEle ?? 3000) - (r.minEle ?? 2300);

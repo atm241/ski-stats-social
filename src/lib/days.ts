@@ -133,9 +133,9 @@ export interface LeaderboardRow extends SeasonTotals {
  * Season leaderboard. Aggregates in memory, which is fine for a small user base;
  * at scale, move this to a SQL GROUP BY or a materialized per-user season table.
  */
-export async function leaderboard(seasonKey: string, metric: Metric): Promise<LeaderboardRow[]> {
+export async function leaderboard(seasonKey: string, metric: Metric, userIds?: string[]): Promise<LeaderboardRow[]> {
   const days = await prisma.skiDay.findMany({
-    where: { seasonKey, flagged: false },
+    where: { seasonKey, flagged: false, ...(userIds ? { userId: { in: userIds } } : {}) },
     select: { userId: true, verticalM: true, uphillM: true, localDate: true, resortId: true, kind: true, distanceM: true, skiTimeS: true, user: true },
   });
 

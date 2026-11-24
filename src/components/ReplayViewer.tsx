@@ -1,5 +1,8 @@
 "use client";
 
+import { Circle, Pause, Play } from "lucide-react";
+import { initials } from "@/lib/avatars";
+
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
@@ -106,15 +109,15 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       const describe = (pt: ReplayPoint, i: number) => {
         switch (pt.activity) {
           case "run":
-            return { icon: "🎿", label: `Skiing ${pt.place ?? "a run"}` };
+            return { icon: "#5cc8ff", label: `Skiing ${pt.place ?? "a run"}` };
           case "lift":
-            return { icon: "🚡", label: `Riding ${pt.place ?? "the lift"}` };
+            return { icon: "#a78bfa", label: `Riding ${pt.place ?? "the lift"}` };
           case "skin":
-            return { icon: "🥾", label: "Climbing under your own power" };
+            return { icon: "#fbbf24", label: "Climbing under your own power" };
           case "drive":
-            return { icon: "🚗", label: "Car ride" };
+            return { icon: "#5d6678", label: "Car ride" };
           default:
-            return { icon: idleLabel[i] === "Lunch break" ? "🍔" : idleLabel[i] === "In the lift line" ? "⏳" : "☕", label: idleLabel[i] };
+            return { icon: idleLabel[i] === "In the lift line" ? "#fbbf24" : "#5d6678", label: idleLabel[i] };
         }
       };
 
@@ -122,9 +125,9 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       const skier = createSkier();
       scene.add(skier.object);
       const bubble = document.createElement("div");
-      bubble.className = "flex items-center gap-1 rounded-full bg-white/95 py-0.5 pr-2.5 pl-1 text-xs font-bold text-ink shadow ring-1 ring-black/5 whitespace-nowrap";
-      bubble.innerHTML = `<span style="font-size:16px"></span><span></span>`;
-      (bubble.children[0] as HTMLElement).textContent = rider.avatar;
+      bubble.className = "flex items-center gap-1.5 rounded-full border border-white/10 bg-[#090b10]/80 py-0.5 pr-2.5 pl-0.5 text-xs font-medium text-[#e8edf5] shadow-lg backdrop-blur whitespace-nowrap";
+      bubble.innerHTML = `<span style="display:inline-flex;width:20px;height:20px;border-radius:999px;align-items:center;justify-content:center;font-size:9px;font-weight:600;background:#5cc8ff26;color:#5cc8ff"></span><span></span>`;
+      (bubble.children[0] as HTMLElement).textContent = initials(rider.displayName);
       (bubble.children[1] as HTMLElement).textContent = rider.displayName;
       const marker = new CSS2DObject(bubble);
       scene.add(marker);
@@ -192,19 +195,25 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         if (!hudNow) return;
         const u = w / 1280;
         ctx.save();
-        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        const font = "Geist, ui-sans-serif, system-ui, sans-serif";
+        ctx.fillStyle = "rgba(9,11,16,0.78)";
         ctx.beginPath();
-        ctx.roundRect(24 * u, 24 * u, 430 * u, 118 * u, 22 * u);
+        ctx.roundRect(24 * u, 24 * u, 430 * u, 118 * u, 14 * u);
         ctx.fill();
-        ctx.fillStyle = "#1f2b4d";
-        ctx.font = `600 ${30 * u}px ui-rounded, system-ui, sans-serif`;
+        ctx.fillStyle = "#e8edf5";
+        ctx.font = `600 ${30 * u}px ${font}`;
         ctx.fillText(hudNow.clock, 44 * u, 66 * u);
-        ctx.font = `500 ${20 * u}px ui-rounded, system-ui, sans-serif`;
-        ctx.fillText(`${hudNow.icon} ${hudNow.label}`.slice(0, 40), 44 * u, 96 * u);
-        ctx.fillStyle = "#5d6a8c";
-        ctx.fillText(`⛰️ ${hudNow.verticalFt.toLocaleString()} ft · run ${hudNow.run} of ${hudNow.runs}`, 44 * u, 126 * u);
-        ctx.font = `600 ${18 * u}px ui-rounded, system-ui, sans-serif`;
-        ctx.fillStyle = "rgba(31,43,77,0.7)";
+        ctx.fillStyle = hudNow.icon;
+        ctx.beginPath();
+        ctx.arc(50 * u, 89 * u, 5 * u, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#e8edf5";
+        ctx.font = `500 ${20 * u}px ${font}`;
+        ctx.fillText(hudNow.label.slice(0, 36), 64 * u, 96 * u);
+        ctx.fillStyle = "#8b95a8";
+        ctx.fillText(`${hudNow.verticalFt.toLocaleString()} ft · run ${hudNow.run} of ${hudNow.runs}`, 44 * u, 126 * u);
+        ctx.font = `600 ${18 * u}px ${font}`;
+        ctx.fillStyle = "rgba(9,11,16,0.7)";
         ctx.fillText(title, 24 * u, h - 24 * u);
         ctx.restore();
       };
@@ -324,35 +333,35 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
 
   return (
     <div className="space-y-3">
-      <div className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-4xl bg-[#e7eaed] shadow-card ring-1 ring-line">
+      <div className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-[#e7eaed] shadow-card">
         <div ref={host} className="absolute inset-0" />
         {status !== "ready" && (
           <div className="absolute inset-0 flex items-center justify-center text-ink-soft">
-            {status === "loading" ? <span className="animate-pulse font-display text-lg">Waxing skis… 🎿</span> : <span>Couldn&apos;t load the replay.</span>}
+            {status === "loading" ? <span className="animate-pulse text-sm text-[#5d6678]">Loading replay…</span> : <span className="text-sm text-[#5d6678]">Couldn&apos;t load the replay.</span>}
           </div>
         )}
         {hud && (
-          <div className="pointer-events-none absolute top-3 left-3 rounded-3xl bg-white/90 px-4 py-3 shadow ring-1 ring-black/5">
-            <div className="font-display text-2xl font-semibold tabular-nums">{hud.clock}</div>
-            <div className="text-sm font-semibold">
-              <span aria-hidden>{hud.icon}</span> {hud.label}
+          <div className="pointer-events-none absolute top-3 left-3 rounded-xl border border-white/10 bg-bg/80 px-4 py-3 shadow-xl backdrop-blur">
+            <div className="num text-2xl font-semibold">{hud.clock}</div>
+            <div className="mt-0.5 flex items-center gap-2 text-sm">
+              <span className="h-2 w-2 rounded-full" style={{ background: hud.icon }} aria-hidden /> {hud.label}
             </div>
-            <div className="mt-1 text-xs text-ink-soft tabular-nums">
-              ⛰️ {hud.verticalFt.toLocaleString()} ft · run {hud.run} of {hud.runs}
+            <div className="num mt-1 text-xs text-ink-soft">
+              {hud.verticalFt.toLocaleString()} ft · run {hud.run} of {hud.runs}
             </div>
           </div>
         )}
         {recording && (
-          <div className="absolute top-3 right-3 flex items-center gap-2 rounded-full bg-white/95 py-1 pr-1 pl-3 text-sm font-bold shadow">
+          <div className="absolute top-3 right-3 flex items-center gap-2 rounded-lg border border-white/10 bg-bg/85 py-1 pr-1 pl-3 text-sm shadow-xl backdrop-blur">
             {recording.error ? (
-              <span className="text-berry">{recording.error}</span>
+              <span className="text-bad">{recording.error}</span>
             ) : (
               <>
                 <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e5484d]" aria-hidden />
                 Recording {fmt(recording.elapsed)} / {fmt(total)}
               </>
             )}
-            <button type="button" className="rounded-full px-2.5 py-1 text-ink-soft hover:bg-snow" onClick={() => (recording.error ? setRecording(null) : engine.current?.cancelRecording())}>
+            <button type="button" className="rounded-md px-2.5 py-1 text-ink-soft hover:bg-raised" onClick={() => (recording.error ? setRecording(null) : engine.current?.cancelRecording())}>
               {recording.error ? "OK" : "Cancel"}
             </button>
           </div>
@@ -363,12 +372,12 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         <div className="card flex flex-wrap items-center gap-3 p-3">
           <button
             type="button"
-            className="btn-primary h-11 w-11 px-0! py-0!"
+            className="btn-primary h-10 w-10 px-0! py-0!"
             onClick={() => engine.current?.setPlaying(!playing)}
             aria-label={playing ? "Pause" : "Play"}
             disabled={!!recording && !recording.error}
           >
-            {playing ? "❚❚" : "▶"}
+            {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
           </button>
           <input
             type="range"
@@ -376,16 +385,16 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
             max={1000}
             value={Math.round(progress * 1000)}
             onChange={(e) => engine.current?.seek(Number(e.target.value) / 1000)}
-            className="min-w-40 flex-1 accent-[#2f7fe0]"
+            className="min-w-40 flex-1 accent-[#5cc8ff]"
             aria-label="Replay position"
             disabled={!!recording && !recording.error}
           />
-          <span className="w-24 text-sm text-ink-soft tabular-nums">
+          <span className="num w-24 text-sm text-ink-soft">
             {fmt((progress * total) / 1)} / {fmt(total)}
           </span>
           <button
             type="button"
-            className="btn-ghost px-3! py-1.5! text-sm!"
+            className="btn-ghost px-3! py-1.5!"
             onClick={() => {
               const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length];
               setSpeed(next);
@@ -405,7 +414,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
                 setLengthMin(v);
                 engine.current?.setLength(v);
               }}
-              className="rounded-full bg-white px-2 py-1.5 font-semibold text-ink ring-1 ring-line"
+              className="rounded-lg border border-line bg-raised px-2 py-1.5 text-ink"
               disabled={!!recording && !recording.error}
             >
               {LENGTHS_MIN.map((m) => (
@@ -415,8 +424,8 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
               ))}
             </select>
           </label>
-          <button type="button" className="btn-ghost px-3! py-1.5! text-sm!" onClick={() => engine.current?.startRecording()} disabled={!!recording && !recording.error}>
-            ⏺ Record video
+          <button type="button" className="btn-ghost px-3! py-1.5!" onClick={() => engine.current?.startRecording()} disabled={!!recording && !recording.error}>
+            <Circle size={10} fill="var(--color-bad)" className="text-bad" /> Record video
           </button>
         </div>
       )}

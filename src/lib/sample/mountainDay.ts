@@ -84,15 +84,27 @@ export function mountainDay(data: MountainData, o: MountainDayOptions): { points
   };
 
   // Keep only lifts you can ski down from to another usable lift (iterate until stable).
+  // Remember one way down from each lift, as a fallback when a random search misses on a big network.
   let usable = new Set(lifts);
+  const known = new Map<Lift, { runs: Run[]; lift: Lift }>();
   for (let changed = true; changed; ) {
     changed = false;
     for (const l of usable) {
-      const ok = Array.from({ length: 12 }).some(() => descend(l.coords.at(-1)!, usable));
-      if (!ok) {
+      let found: { runs: Run[]; lift: Lift } | null = null;
+      for (let k = 0; k < 12 && !found; k++) found = descend(l.coords.at(-1)!, usable);
+      if (found) known.set(l, found);
+      else {
         usable.delete(l);
         changed = true;
       }
+    }
+    // a remembered descent may end at a lift that has since been dropped
+    for (const [l, d] of known) if (!usable.has(l) || !usable.has(d.lift)) known.delete(l);
+    for (const l of usable) if (!known.has(l)) changed = true;
+    if (changed) for (const l of usable) if (!known.has(l)) {
+      const d = descend(l.coords.at(-1)!, usable);
+      if (d) known.set(l, d);
+      else usable.delete(l);
     }
   }
   if (usable.size === 0) throw new Error(`no connected lift/run network found for ${data.name}`);
@@ -149,7 +161,9 @@ export function mountainDay(data: MountainData, o: MountainDayOptions): { points
     travel(lift.coords, () => lift.speed, true);
     wait(20 + rand() * 60, lift.coords.at(-1)!); // strap in, look around
 
-    const descent = descend(lift.coords.at(-1)!, usable)!;
+    let descent: { runs: Run[]; lift: Lift } | null = null;
+    for (let k = 0; k < 20 && !descent; k++) descent = descend(lift.coords.at(-1)!, usable);
+    descent ??= known.get(lift)!;
     for (const r of descent.runs) {
       if (dist(here, r.coords[0]) > 5) travel([here, r.coords[0]], () => 3); // skate over to the run
       itinerary.push({ kind: "run", name: r.name });

@@ -20,7 +20,7 @@ export const isGpxName = (name: string) => name.toLowerCase().endsWith(".gpx");
  * The single path every file takes into the app (web upload, email, later the phone app):
  * analyze, save new days, and log the outcome in Upload so the user can see what happened.
  */
-export async function ingestFile(userId: string, fileName: string, bytes: Buffer, source: "web" | "email"): Promise<IngestResult> {
+export async function ingestFile(userId: string, fileName: string, bytes: Buffer, source: "web" | "email" | "health"): Promise<IngestResult> {
   const r: IngestResult = { fileName, saved: [], notes: [] };
   if (!isGpxName(fileName)) r.error = "Only .gpx files are supported right now.";
   else if (bytes.length > MAX_FILE_BYTES) r.error = "File is larger than 30 MB.";
@@ -29,7 +29,7 @@ export async function ingestFile(userId: string, fileName: string, bytes: Buffer
       const { days, skipped } = processGpx(bytes.toString("utf8"));
       r.notes.push(...skipped);
       for (const d of days) {
-        const outcome = await saveDay(userId, d, source === "web" ? "gpx" : "email", fileName);
+        const outcome = await saveDay(userId, d, source === "web" ? "gpx" : source, fileName);
         if (outcome.status === "duplicate") r.notes.push(`${d.localDate}: already uploaded`);
         else r.saved.push({ id: outcome.day.id, localDate: d.localDate, resortName: d.resort?.name ?? null, verticalM: d.stats.verticalM, flagged: outcome.day.flagged });
       }

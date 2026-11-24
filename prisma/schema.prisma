@@ -25,6 +25,34 @@ model User {
   days        SkiDay[]
   sessions    Session[]
   uploads     Upload[]
+  following   Follow[] @relation("follower")
+  followers   Follow[] @relation("following")
+  apiTokens   ApiToken[]
+}
+
+/// Personal access token for the iPhone sync app (Bearer auth on /api/uploads). Only the hash is stored.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+/// One-way follow (like Strava): following someone puts their days in your feed and friends board.
+model Follow {
+  followerId  String
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followingId])
 }
 
 /// Database session; the cookie holds a random token, only its SHA-256 is stored.

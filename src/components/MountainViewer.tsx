@@ -1,12 +1,16 @@
 "use client";
 
+import { Mountain, MapPin, Pause, RotateCw, Sparkles, Triangle, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Difficulty } from "./ui";
 import * as THREE from "three";
 import { buildMountainScene, DIFFICULTY } from "@/lib/mountain/buildScene";
 import { createStage } from "@/lib/mountain/stage";
 import type { MountainData } from "@/lib/mountain/types";
 
 type Hover = { x: number; y: number; title: string; sub: string } | null;
+const LANDMARK_ICON: Record<string, LucideIcon> = { cliff: Mountain, park: Sparkles, pipe: Sparkles, peak: Triangle };
+const GLASS_BTN = "inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-bg/75 px-3 py-1.5 text-sm text-ink backdrop-blur transition-colors hover:bg-bg/90";
 
 export function MountainViewer({ slug }: { slug: string }) {
   const host = useRef<HTMLDivElement>(null);
@@ -15,7 +19,15 @@ export function MountainViewer({ slug }: { slug: string }) {
   const [spin, setSpin] = useState(true);
   const [labels, setLabels] = useState(true);
   const [trails, setTrails] = useState(true);
-  const api = useRef<{ setSpin: (v: boolean) => void; setLabels: (v: boolean) => void; setTrails: (v: boolean) => void; resetView: () => void; baseView: () => void } | null>(null);
+  const [landmarks, setLandmarks] = useState<{ name: string; kind: string }[]>([]);
+  const api = useRef<{
+    setSpin: (v: boolean) => void;
+    setLabels: (v: boolean) => void;
+    setTrails: (v: boolean) => void;
+    resetView: () => void;
+    baseView: () => void;
+    flyTo: (i: number) => void;
+  } | null>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -42,6 +54,18 @@ export function MountainViewer({ slug }: { slug: string }) {
       controls.autoRotate = true;
       controls.autoRotateSpeed = 0.35;
       controls.addEventListener("start", () => setSpin(false));
+      // Smooth camera flights to landmarks
+      let flight: { from: THREE.Vector3; fromT: THREE.Vector3; to: THREE.Vector3; toT: THREE.Vector3; t: number } | null = null;
+      const flyTo = (i: number) => {
+        const v = built.landmarkViews[i];
+        if (!v) return;
+        controls.autoRotate = false;
+        setSpin(false);
+        flight = { from: camera.position.clone(), fromT: controls.target.clone(), to: v.position, toT: v.target, t: 0 };
+      };
+      controls.addEventListener("start", () => (flight = null));
+      setLandmarks(built.landmarkViews.map(({ name, kind }) => ({ name, kind })));
+
       const baseView = () => {
         if (!built.baseView) return;
         camera.position.copy(built.baseView.position);
@@ -104,7 +128,14 @@ export function MountainViewer({ slug }: { slug: string }) {
         }
       };
 
-      stage.onFrame(() => {
+      stage.onFrame((dt) => {
+        if (flight) {
+          flight.t = Math.min(1, flight.t + dt / 1.6);
+          const e = flight.t < 0.5 ? 4 * flight.t ** 3 : 1 - (-2 * flight.t + 2) ** 3 / 2;
+          camera.position.lerpVectors(flight.from, flight.to, e);
+          controls.target.lerpVectors(flight.fromT, flight.toT, e);
+          if (flight.t >= 1) flight = null;
+        }
         if (pending) {
           pick(pending);
           pending = null;
@@ -121,6 +152,10 @@ export function MountainViewer({ slug }: { slug: string }) {
         },
         baseView: () => {
           baseView();
+          setLabels(false);
+        },
+        flyTo: (i) => {
+          flyTo(i);
           setLabels(false);
         },
       };
@@ -152,13 +187,13 @@ export function MountainViewer({ slug }: { slug: string }) {
   }, [trails]);
 
   return (
-    <div className="relative h-[72vh] min-h-[420px] overflow-hidden rounded-4xl bg-[#e7eaed] shadow-card ring-1 ring-line">
+    <div className="relative h-[72vh] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-[#e7eaed] shadow-card">
       <div ref={host} className="absolute inset-0" />
 
       {status !== "ready" && (
         <div className="absolute inset-0 flex items-center justify-center text-ink-soft">
           {status === "loading" ? (
-            <span className="animate-pulse font-display text-lg">Building the mountain… 🏔️</span>
+            <span className="animate-pulse text-sm text-[#5d6678]">Building the mountain…</span>
           ) : (
             <span>Couldn&apos;t load this mountain.</span>
           )}
@@ -167,48 +202,60 @@ export function MountainViewer({ slug }: { slug: string }) {
 
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 rounded-xl bg-ink px-3 py-1.5 text-white shadow-lg"
+          className="pointer-events-none absolute z-10 rounded-lg border border-white/10 bg-bg/90 px-3 py-1.5 shadow-xl backdrop-blur"
           style={{ left: hover.x, top: hover.y, transform: "translate(12px, -110%)" }}
         >
-          <div className="font-display text-sm font-semibold">{hover.title}</div>
-          <div className="text-xs opacity-80">{hover.sub}</div>
+          <div className="text-sm font-medium">{hover.title}</div>
+          <div className="text-xs text-ink-soft">{hover.sub}</div>
         </div>
       )}
 
-      <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1.5">
+      <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-3 rounded-lg border border-white/10 bg-bg/75 px-3 py-1.5 text-xs text-ink-soft backdrop-blur">
         {(["easy", "intermediate", "advanced", "expert"] as const).map((k) => (
-          <span key={k} className="chip bg-white/90 text-ink shadow-sm ring-1 ring-black/5">
-            <span style={{ color: DIFFICULTY[k].color }} aria-hidden>
-              {DIFFICULTY[k].symbol}
-            </span>
+          <span key={k} className="flex items-center gap-1.5">
+            <Difficulty level={k} size={9} />
             {DIFFICULTY[k].label}
           </span>
         ))}
-        <span className="chip bg-white/90 text-ink shadow-sm ring-1 ring-black/5">
+        <span className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-sm bg-[#d8433b]" aria-hidden /> Lifts
         </span>
       </div>
 
+      {status === "ready" && landmarks.length > 0 && (
+        <div className="absolute top-3 right-3 flex max-w-[55%] flex-wrap justify-end gap-1.5">
+          {landmarks.map((l, i) => (
+            <button key={l.name} type="button" onClick={() => api.current?.flyTo(i)} className={GLASS_BTN}>
+              {(() => {
+                const Icon = LANDMARK_ICON[l.kind] ?? MapPin;
+                return <Icon size={13} className="text-accent" aria-hidden />;
+              })()}
+              {l.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {status === "ready" && (
         <div className="absolute right-3 bottom-3 flex flex-wrap justify-end gap-1.5">
-          <button type="button" onClick={() => setSpin((v) => !v)} className="btn-ghost px-3! py-1.5! text-sm!" aria-pressed={spin}>
-            {spin ? "⏸ Spin" : "▶ Spin"}
+          <button type="button" onClick={() => setSpin((v) => !v)} className={GLASS_BTN} aria-pressed={spin}>
+            {spin ? <Pause size={13} aria-hidden /> : <RotateCw size={13} aria-hidden />} Spin
           </button>
-          <button type="button" onClick={() => setTrails((v) => !v)} className="btn-ghost px-3! py-1.5! text-sm!" aria-pressed={trails}>
+          <button type="button" onClick={() => setTrails((v) => !v)} className={GLASS_BTN} aria-pressed={trails}>
             {trails ? "Hide trails" : "Show trails"}
           </button>
-          <button type="button" onClick={() => setLabels((v) => !v)} className="btn-ghost px-3! py-1.5! text-sm!" aria-pressed={labels}>
+          <button type="button" onClick={() => setLabels((v) => !v)} className={GLASS_BTN} aria-pressed={labels}>
             {labels ? "Hide peaks" : "Show peaks"}
           </button>
-          <button type="button" onClick={() => api.current?.baseView()} className="btn-ghost px-3! py-1.5! text-sm!">
+          <button type="button" onClick={() => api.current?.baseView()} className={GLASS_BTN}>
             Lift base view
           </button>
-          <button type="button" onClick={() => api.current?.resetView()} className="btn-ghost px-3! py-1.5! text-sm!">
+          <button type="button" onClick={() => api.current?.resetView()} className={GLASS_BTN}>
             Whole resort
           </button>
         </div>
       )}
-      <p className="pointer-events-none absolute bottom-3 left-3 hidden rounded-full bg-white/80 px-3 py-1 text-xs text-ink-soft sm:block">Drag to orbit · scroll to zoom · hover a run</p>
+      <p className="pointer-events-none absolute bottom-3 left-3 hidden rounded-lg border border-white/10 bg-bg/75 px-3 py-1 text-xs text-ink-soft backdrop-blur sm:block">Drag to orbit · scroll to zoom · hover a run</p>
     </div>
   );
 }

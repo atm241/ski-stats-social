@@ -2,7 +2,10 @@
  * Builds a low-poly 3D mountain dataset for one resort: a terrain height grid plus its runs,
  * lifts and named peaks, written to public/mountains/<slug>.json for the three.js viewer.
  *
- *   npx tsx scripts/build-mountain.ts deer-valley "Deer Valley Resort"
+ *   npx tsx scripts/build-mountain.ts deer-valley          (resorts + landmarks from scripts/mountains.config.ts)
+ *   npx tsx scripts/build-mountain.ts my-hill "Resort Name"  (any single resort in data/resorts.json)
+ *
+ * Usually run through scripts/build-all.ts, which also adds the forest and cliff layers.
  *
  * Elevation: AWS Open Data "Terrain Tiles" (Terrarium PNG encoding, Mapzen / Tilezen sources).
  * Runs, lifts and peaks: © OpenStreetMap contributors (ODbL), via the Overpass API.
@@ -13,13 +16,14 @@ import { pointInRing } from "../src/lib/analysis/geo";
 import { PNG } from "pngjs";
 import type { MountainData } from "../src/lib/mountain/types";
 import type { Resort } from "../src/lib/resorts/types";
+import { overpass } from "./lib/overpass";
+import { MOUNTAINS } from "./mountains.config";
 
 const ZOOM = 13; // ~15 m/px at Utah latitudes, resampled down to GRID_CELL_M
 const GRID_CELL_M = 40;
 const PAD = 0.1; // extra terrain margin around the runs and lifts
 /** OSM resort outlines lag expansions (Deer Valley's East Village), so search wider than the outline. */
 const SEARCH_GROW = 0.4;
-const OVERPASS = "https://overpass-api.de/api/interpreter";
 
 const tileX = (lon: number, z: number) => ((lon + 180) / 360) * 2 ** z;
 const tileY = (lat: number, z: number) => ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * 2 ** z;
@@ -31,14 +35,22 @@ async function fetchTile(z: number, x: number, y: number): Promise<PNG> {
 }
 
 async function main() {
-  const [slug, resortName] = process.argv.slice(2);
-  if (!slug || !resortName) throw new Error('usage: build-mountain.ts <slug> "<Resort name>"');
-  const resorts = JSON.parse(readFileSync("data/resorts.json", "utf8")) as Resort[];
-  const resort = resorts.find((r) => r.name === resortName);
-  if (!resort) throw new Error(`resort not found: ${resortName}`);
+  const [slug, resortArg] = process.argv.slice(2);
+  const config = MOUNTAINS[slug] ?? (resortArg ? { name: resortArg, resorts: [resortArg], landmarks: [] } : null);
+  if (!config) throw new Error(`usage: build-mountain.ts <slug> ["<Resort name>"]; known slugs: ${Object.keys(MOUNTAINS).join(", ")}`);
+  const all = JSON.parse(readFileSync("data/resorts.json", "utf8")) as Resort[];
+  const ourResorts = config.resorts.map((name) => {
+    const r = all.find((x) => x.name === name);
+    if (!r) throw new Error(`resort not found: ${name}`);
+    return r;
+  });
+  const ourNames = new Set(config.resorts);
 
-  // --- runs, lifts, peaks from OpenStreetMap, searched a bit wider than the resort outline
-  const [w0, s0, e0, n0] = resort.bbox;
+  // --- runs, lifts, peaks from OpenStreetMap, searched a bit wider than the resort outlines
+  const w0 = Math.min(...ourResorts.map((r) => r.bbox[0]));
+  const s0 = Math.min(...ourResorts.map((r) => r.bbox[1]));
+  const e0 = Math.max(...ourResorts.map((r) => r.bbox[2]));
+  const n0 = Math.max(...ourResorts.map((r) => r.bbox[3]));
   const gLon = (e0 - w0) * SEARCH_GROW;
   const gLat = (n0 - s0) * SEARCH_GROW;
   const sb = `${s0 - gLat},${w0 - gLon},${n0 + gLat},${e0 + gLon}`;
@@ -48,18 +60,25 @@ async function main() {
     node["natural"="peak"]["name"](${sb});
     way["landuse"="winter_sports"]["name"](${sb});
   );out geom;`;
-  const osmRes = await fetch(OVERPASS, {
-    method: "POST",
-    body: new URLSearchParams({ data: q }),
-    headers: { "User-Agent": "pow-pals-mountain-builder/0.1 (personal project)" },
-  });
-  if (!osmRes.ok) throw new Error(`overpass: ${osmRes.status} ${await osmRes.text()}`);
   type El = { type: string; id: number; lat?: number; lon?: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
-  const elements = ((await osmRes.json()) as { elements: El[] }).elements;
+  const { elements } = await overpass<{ elements: El[] }>(q);
 
   // Drop anything that mostly sits inside a *different* resort's outline (e.g. Park City next door).
+  // An outline is ours if its name matches or it mostly overlaps our resorts' own polygons: OSM and
+  // OpenSkiMap often name the same area differently ("Arapahoe Basin" vs "Arapahoe Basin Ski Area").
+  const core = (n: string) =>
+    n
+      .toLowerCase()
+      .replace(/\b(ski|area|resort|mountain|the)\b/g, "")
+      .replace(/[^a-z0-9]/g, "");
+  const ourCores = new Set(config.resorts.map(core));
+  const isOurs = (e: El) => {
+    if (ourNames.has(e.tags!.name) || ourCores.has(core(e.tags!.name ?? ""))) return true;
+    const ring = e.geometry!.map((p) => [p.lon, p.lat] as [number, number]);
+    return ourResorts.some((r) => pointInRing(r.center[0], r.center[1], ring));
+  };
   const neighbours = elements
-    .filter((e) => e.tags?.landuse === "winter_sports" && e.tags.name !== resort.name && e.geometry)
+    .filter((e) => e.tags?.landuse === "winter_sports" && e.geometry && !isOurs(e))
     .map((e) => e.geometry!.map((p) => [p.lon, p.lat] as [number, number]));
   const belongsElsewhere = (g: { lat: number; lon: number }[]) =>
     neighbours.some((ring) => g.filter((p) => pointInRing(p.lon, p.lat, ring)).length > g.length / 2);
@@ -67,6 +86,8 @@ async function main() {
   const runWays = ours.filter((e) => e.tags?.["piste:type"] === "downhill" && e.tags?.area !== "yes");
   const liftWays = ours.filter((e) => e.tags?.aerialway && !["station", "pylon", "goods", "zip_line"].includes(e.tags.aerialway));
   console.log(`kept ${runWays.length} runs, ${liftWays.length} lifts (${neighbours.length} neighbouring resort outline(s) excluded)`);
+
+  if (runWays.length + liftWays.length === 0) throw new Error(`no runs or lifts found for ${config.name}; check the resort names in mountains.config.ts`);
 
   // Terrain extent = everything we kept, plus margin.
   const pts = [...runWays, ...liftWays].flatMap((e) => e.geometry!);
@@ -112,7 +133,8 @@ async function main() {
   const line = (g: { lat: number; lon: number }[]) => g.map((p) => [+p.lon.toFixed(6), +p.lat.toFixed(6)] as [number, number]);
   const data: MountainData = {
     slug,
-    name: resort.name,
+    name: config.name,
+    resorts: config.resorts,
     bbox,
     grid: { cols, rows, cellM: GRID_CELL_M, widthM, depthM, heights },
     runs: runWays.map((e) => ({ id: e.id, name: e.tags?.["piste:name"] ?? e.tags?.name ?? null, difficulty: e.tags?.["piste:difficulty"] ?? null, coords: line(e.geometry!) })),
@@ -127,6 +149,7 @@ async function main() {
   mkdirSync(join("public", "mountains"), { recursive: true });
   writeFileSync(out, JSON.stringify(data));
   console.log(`${cols}×${rows} grid (${Math.round(widthM)}×${Math.round(depthM)} m), ${data.runs.length} runs, ${data.lifts.length} lifts, ${data.peaks.length} peaks → ${out}`);
+  console.log(`next: npx tsx scripts/build-forest.ts ${slug} && npx tsx scripts/build-cliffs.ts ${slug}   (or use build-all.ts)`);
 }
 
 main().catch((e) => {

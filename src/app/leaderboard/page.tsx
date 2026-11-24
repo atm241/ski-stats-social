@@ -3,51 +3,54 @@ import { LeaderboardList, METRIC_BLURB, METRIC_LABEL } from "@/components/Leader
 import { currentUser } from "@/lib/auth";
 import { leaderboard, METRICS, seasonsWithData, type Metric } from "@/lib/days";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
+import { followingIds } from "@/lib/social";
 
-export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ season?: string; metric?: string }> }) {
+export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ season?: string; metric?: string; scope?: string }> }) {
   const sp = await searchParams;
-  const seasons = await seasonsWithData();
+  const [seasons, me] = await Promise.all([seasonsWithData(), currentUser()]);
   const season = sp.season && seasons.includes(sp.season) ? sp.season : seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
   const metric: Metric = METRICS.includes(sp.metric as Metric) ? (sp.metric as Metric) : "vertical";
-  const [rows, me] = await Promise.all([leaderboard(season, metric), currentUser()]);
+  const friends = me && sp.scope === "friends" ? [me.id, ...(await followingIds(me.id))] : undefined;
+  const rows = await leaderboard(season, metric, friends);
 
-  const href = (s: string, m: Metric) => `/leaderboard?season=${s}&metric=${m}`;
+  const href = (o: { s?: string; m?: Metric; scope?: string }) => `/leaderboard?season=${o.s ?? season}&metric=${o.m ?? metric}${(o.scope ?? sp.scope) === "friends" ? "&scope=friends" : ""}`;
+  const tab = (active: boolean) => `shrink-0 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${active ? "bg-hover text-ink" : "text-ink-soft hover:text-ink"}`;
 
   return (
-    <div className="pt-2">
-      <h1 className="mb-1 font-display text-3xl font-bold">Leaderboard 🏆</h1>
-      <p className="mb-5 text-ink-soft">Everyone, everywhere, resort and backcountry.</p>
+    <div className="mx-auto max-w-3xl">
+      <h1 className="text-3xl font-semibold tracking-tight">Leaderboard</h1>
+      <p className="mt-1 text-sm text-ink-soft">{METRIC_BLURB[metric]}</p>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex max-w-full overflow-x-auto rounded-full bg-white p-1 ring-1 ring-line" role="tablist" aria-label="Ranking">
+      <div className="mt-6 mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex max-w-full overflow-x-auto rounded-lg border border-line bg-surface p-0.5" role="tablist" aria-label="Ranking">
           {METRICS.map((m) => (
-            <Link
-              key={m}
-              href={href(season, m)}
-              role="tab"
-              aria-selected={m === metric}
-              className={`shrink-0 rounded-full px-4 py-1.5 font-display text-sm font-semibold whitespace-nowrap ${m === metric ? "bg-ink text-white" : "text-ink-soft hover:text-ink"}`}
-            >
+            <Link key={m} href={href({ m })} role="tab" aria-selected={m === metric} className={tab(m === metric)}>
               {METRIC_LABEL[m]}
             </Link>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1">
+        {me && (
+          <div className="flex rounded-lg border border-line bg-surface p-0.5">
+            <Link href={href({ scope: "all" })} className={tab(sp.scope !== "friends")}>
+              Everyone
+            </Link>
+            <Link href={href({ scope: "friends" })} className={tab(sp.scope === "friends")}>
+              Friends
+            </Link>
+          </div>
+        )}
+        <div className="ml-auto flex gap-1">
           {seasons.map((s) => (
-            <Link
-              key={s}
-              href={href(s, metric)}
-              className={`rounded-full px-3 py-1.5 text-sm font-bold ${s === season ? "bg-sky-soft text-sky-deep ring-1 ring-sky/40" : "text-ink-soft hover:bg-white"}`}
-            >
+            <Link key={s} href={href({ s })} className={tab(s === season)}>
               {seasonLabel(s)}
             </Link>
           ))}
         </div>
       </div>
 
-      <p className="mb-2 text-sm font-semibold text-ink-soft">{METRIC_BLURB[metric]}</p>
       <LeaderboardList rows={rows} metric={metric} meId={me?.id} />
-      <p className="mt-3 text-xs text-ink-soft">Seasons run July–June (southern-hemisphere winters count toward the upcoming season). Flagged days are excluded.</p>
+      {friends && friends.length === 1 && <p className="mt-3 text-sm text-ink-soft">Follow skiers from their profiles to build your friends board.</p>}
+      <p className="mt-4 text-xs text-ink-faint">Seasons run July–June (southern-hemisphere winters count toward the upcoming season). Flagged days are excluded.</p>
     </div>
   );
 }

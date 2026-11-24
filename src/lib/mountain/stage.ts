@@ -56,17 +56,26 @@ export function createStage(el: HTMLElement, built: MountainScene) {
   controls.maxDistance = span * 2.2;
 
   const homeView = () => {
-    camera.position.set(span * 0.55, span * 0.75, span * 1.3);
+    // from the side the runs face, a little off-axis so the relief reads
+    const d = built.homeDirection.clone().rotateAround(new THREE.Vector2(), 0.4);
+    camera.position.set(d.x * span * 1.41, span * 0.75, d.y * span * 1.41);
     controls.target.set(0, (terrain.maxEle - terrain.minEle) * terrain.exaggeration * 0.35, 0);
     controls.update();
   };
   homeView();
 
   const peakLabels = new THREE.Group();
-  for (const p of built.peaks) {
+  // When labels collide (see declutter below), landmark summits (KT-22, Lone Peak) win, then higher ones.
+  // Landmark and OSM peak names can differ, so match them by position.
+  const isLandmark = (p: THREE.Vector3) =>
+    built.landmarkViews.some((l) => l.kind === "peak" && Math.hypot(l.target.x - p.x, l.target.z - p.z) < 80);
+  const rank = (p: (typeof built.peaks)[number]) => (isLandmark(p.position) ? 1e6 : 0) + (p.ele ?? 0);
+  const labelDivs: HTMLDivElement[] = [];
+  for (const p of [...built.peaks].sort((a, b) => rank(b) - rank(a))) {
     const div = document.createElement("div");
-    div.className = "rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-bold text-ink shadow ring-1 ring-black/5 whitespace-nowrap";
-    div.textContent = p.ele ? `▲ ${p.name} · ${Math.round(p.ele * FT).toLocaleString()} ft` : `▲ ${p.name}`;
+    div.className = "rounded-md border border-white/10 bg-[#090b10]/75 px-2 py-0.5 text-[11px] font-medium text-[#e8edf5] shadow-lg backdrop-blur whitespace-nowrap transition-opacity duration-200";
+    labelDivs.push(div);
+    div.textContent = p.ele ? `${p.name} · ${Math.round(p.ele * FT).toLocaleString()} ft` : p.name;
     const obj = new CSS2DObject(div);
     obj.position.copy(p.position).add(new THREE.Vector3(0, 60, 0));
     peakLabels.add(obj);
@@ -86,6 +95,21 @@ export function createStage(el: HTMLElement, built: MountainScene) {
   ro.observe(el);
   resize();
 
+  // Some resorts have twenty-odd named summits; fade out any label that would overlap a higher one.
+  // CSS2DRenderer owns `display` (frustum culling), so this uses opacity. Checked a few times a second.
+  let declutterTick = 0;
+  const declutter = () => {
+    if (++declutterTick % 8 || !peakLabels.visible) return;
+    const kept: DOMRect[] = [];
+    for (const div of labelDivs) {
+      if (div.style.display === "none") continue;
+      const r = div.getBoundingClientRect();
+      const hit = kept.some((k) => r.left < k.right + 4 && r.right > k.left - 4 && r.top < k.bottom + 2 && r.bottom > k.top - 2);
+      div.style.opacity = hit ? "0" : "1";
+      if (!hit) kept.push(r);
+    }
+  };
+
   const frameCallbacks: ((dt: number) => void)[] = [];
   const afterRenderCallbacks: (() => void)[] = [];
   let frame = 0;
@@ -100,6 +124,7 @@ export function createStage(el: HTMLElement, built: MountainScene) {
     // Runs in the same task as render, so the WebGL canvas can still be copied (e.g. for recording).
     for (const cb of afterRenderCallbacks) cb();
     labelRenderer.render(scene, camera);
+    declutter();
   };
   frame = requestAnimationFrame(loop);
 

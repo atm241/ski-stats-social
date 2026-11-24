@@ -1,14 +1,16 @@
-import { AVATAR_COLORS } from "@/lib/avatars";
+import { AVATAR_COLORS, initials } from "@/lib/avatars";
 
-export function Avatar({ user, size = 40 }: { user: { avatar: string; color: string; displayName: string }; size?: number }) {
+/** Monogram avatar: initials on a tinted disc in the user's colour. */
+export function Avatar({ user, size = 40 }: { user: { color: string; displayName: string }; size?: number }) {
+  const c = AVATAR_COLORS[user.color] ?? AVATAR_COLORS.sky;
   return (
     <span
       role="img"
       aria-label={user.displayName}
-      className="inline-flex shrink-0 items-center justify-center rounded-full ring-2 ring-white"
-      style={{ width: size, height: size, background: AVATAR_COLORS[user.color] ?? AVATAR_COLORS.sky, fontSize: size * 0.55 }}
+      className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-tight"
+      style={{ width: size, height: size, fontSize: size * 0.38, color: c, background: `${c}1f`, boxShadow: `inset 0 0 0 1px ${c}55` }}
     >
-      {user.avatar}
+      {initials(user.displayName)}
     </span>
   );
 }

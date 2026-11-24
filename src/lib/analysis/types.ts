@@ -7,6 +7,8 @@ export interface TrackPoint {
   lon: number;
   /** meters above sea level */
   ele: number;
+  /** device-reported ground speed in m/s (GPS Doppler), when the file has it: Apple Watch, Garmin */
+  speed?: number;
 }
 
 /**
