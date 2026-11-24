@@ -24,6 +24,12 @@ npm run dev          # http://localhost:3000
 - **Derived stats** (ski/lift/lift-line time, longest & tallest run, peak altitude) come from stored segments in `src/lib/analysis/extras.ts`. After changing that logic, run `npx tsx scripts/backfill-day-stats.ts` to recompute existing days.
 - **Seasons:** July–June, keyed `2025-26`; southern-hemisphere June days roll forward (`src/lib/season.ts`).
 
+## 3D mountains and day replays
+
+- `npx tsx scripts/build-mountain.ts <slug> "<Resort name from data/resorts.json>"` builds `public/mountains/<slug>.json`: a terrain height grid (AWS Terrain Tiles) plus runs, lifts and peaks from OpenStreetMap. Features inside a neighbouring resort's outline are dropped. Only Deer Valley is built so far.
+- `/mountains/<slug>` is the low-poly explorer (`src/lib/mountain/buildScene.ts`, `stage.ts`); `/days/<id>/replay` animates a day on it (`replay.ts` timeline, `skier.ts`, `ReplayViewer.tsx`), including in-browser video recording.
+- `src/lib/sample/mountainDay.ts` generates synthetic days on a real lift/run network; the seed gives demo skier "Dana" six Deer Valley days.
+
 ## Accounts and getting data in
 
 - **Sign-in:** email magic link (`src/lib/magicLink.ts`). Links are single-use, expire in 15 minutes, and are redeemed by a button POST so email scanners can't burn them. Sessions are database-backed; only token hashes are stored. Without `RESEND_API_KEY`, emails print to the server console and the login page shows the link (dev only). Demo skiers can be signed into from `/login` in dev.

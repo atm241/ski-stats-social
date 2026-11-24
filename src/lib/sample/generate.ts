@@ -80,6 +80,10 @@ export interface ResortDayOptions {
   drive?: boolean;
   /** Horizontal ski speed, m/s. */
   runSpeed?: number;
+  /** Lift rise/length; default ~0.55. Long gentle gondolas are ~0.1. */
+  liftGrade?: number;
+  /** Lift horizontal speed, m/s; default 4–5. */
+  liftSpeed?: number;
 }
 
 export function resortDay(o: ResortDayOptions): TrackPoint[] {
@@ -94,12 +98,12 @@ export function resortDay(o: ResortDayOptions): TrackPoint[] {
 
   for (let lap = 0; lap < o.laps; lap++) {
     const bearing = (lap % 4) * (Math.PI / 2) + rand() * 0.6;
-    const liftLen = vert * 1.8;
+    const liftLen = vert / (o.liftGrade ?? 1 / 1.8);
     const tx = Math.cos(bearing) * liftLen;
     const ty = Math.sin(bearing) * liftLen;
 
     b.wait(120 + rand() * 300); // lift line
-    b.moveTo(tx, ty, o.topEle, 4 + rand()); // chair: ~2.2 m/s vertical
+    b.moveTo(tx, ty, o.topEle, o.liftSpeed ?? 4 + rand()); // chair: ~2.2 m/s vertical by default
     b.wait(30 + rand() * 90);
 
     const speed = (o.runSpeed ?? 8) + rand() * 3;

@@ -67,6 +67,19 @@ export default async function Home() {
         </section>
       )}
 
+      <Link href="/mountains/deer-valley" className="card flex items-center gap-4 p-4 transition hover:-translate-y-0.5 hover:shadow-lg">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-soft text-2xl" aria-hidden>
+          🏔️
+        </span>
+        <span className="flex-1">
+          <span className="block font-display text-lg font-semibold">Explore Deer Valley in 3D</span>
+          <span className="text-sm text-ink-soft">Every run and lift on a little low-poly mountain. Day replays are coming next.</span>
+        </span>
+        <span className="font-bold text-sky-deep" aria-hidden>
+          →
+        </span>
+      </Link>
+
       <div className="grid gap-6 md:grid-cols-2">
         <section>
           <div className="mb-2 flex items-baseline justify-between">

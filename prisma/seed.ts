@@ -8,7 +8,9 @@ import { readFileSync } from "node:fs";
 import { processGpx } from "../src/lib/analysis/process";
 import { prisma } from "../src/lib/db";
 import { saveDay } from "../src/lib/days";
+import type { MountainData } from "../src/lib/mountain/types";
 import { backcountryDay, passLapsDay, resortDay, rng, toGpx } from "../src/lib/sample/generate";
+import { mountainDay } from "../src/lib/sample/mountainDay";
 import type { Resort } from "../src/lib/resorts/types";
 
 const resorts = JSON.parse(readFileSync("data/resorts.json", "utf8")) as Resort[];
@@ -18,7 +20,13 @@ const resort = (name: string) => {
   return r;
 };
 
-type Trip = { resorts: string[]; days: number; from: string } | { backcountry: [number, number, number]; days: number; from: string };
+type Trip =
+  | { resorts: string[]; days: number; from: string }
+  | { backcountry: [number, number, number]; days: number; from: string }
+  /** real lift & run network from public/mountains/<slug>.json, so the day can be replayed in 3D */
+  | { mountain: string; days: number; from: string };
+
+const mountain = (slug: string) => JSON.parse(readFileSync(`public/mountains/${slug}.json`, "utf8")) as MountainData;
 
 const SKIERS: { username: string; displayName: string; avatar: string; color: string; trips: Trip[] }[] = [
   {
@@ -99,6 +107,13 @@ const SKIERS: { username: string; displayName: string; avatar: string; color: st
     color: "berry",
     trips: [{ resorts: ["Big Sky Resort", "Telluride Ski Area", "Steamboat Ski Resort", "Aspen Snowmass"], days: 8, from: "2026-01-18" }],
   },
+  {
+    username: "dana",
+    displayName: "Dana",
+    avatar: "🦊",
+    color: "sky",
+    trips: [{ mountain: "deer-valley", days: 6, from: "2026-01-10" }],
+  },
 ];
 
 function addDays(date: string, n: number) {
@@ -120,12 +135,14 @@ async function main() {
       let date = trip.from;
       for (let i = 0; i < trip.days; i++) {
         date = addDays(date, 1 + Math.floor(rand() * 3));
-        const lon = "resorts" in trip ? resort(trip.resorts[i % trip.resorts.length]).center[0] : trip.backcountry[1];
+        const lon = "resorts" in trip ? resort(trip.resorts[i % trip.resorts.length]).center[0] : "backcountry" in trip ? trip.backcountry[1] : -111.5;
         // ~9am local, approximated from longitude
         const start = new Date(new Date(`${date}T09:00:00Z`).getTime() - (lon / 15) * 3600_000);
 
         let points;
-        if ("resorts" in trip) {
+        if ("mountain" in trip) {
+          points = mountainDay(mountain(trip.mountain), { start, seed: seed++, laps: 7 + Math.floor(rand() * 6) }).points;
+        } else if ("resorts" in trip) {
           const r = resort(trip.resorts[i % trip.resorts.length]);
           const span = (r.maxEle ?? 3000) - (r.minEle ?? 2300);
           const vert = Math.min(span, 750) * (0.55 + rand() * 0.35);

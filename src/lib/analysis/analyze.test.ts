@@ -46,6 +46,13 @@ describe("analyzeDay", () => {
     expect(day.verticalM).toBeLessThan(1500 * 1.05);
   });
 
+  it("counts a long, gentle gondola as a lift, not a car", () => {
+    // e.g. Deer Valley's East Village Gondola: ~11% grade at full detachable speed
+    const day = analyzeDay(resortDay({ ...VAIL, baseEle: 2000, topEle: 2280, laps: 3, start, liftGrade: 0.11, liftSpeed: 6 }));
+    expect(day.liftCount).toBe(3);
+    expect(day.segments.some((s) => s.kind === "drive")).toBe(false);
+  });
+
   it("flags implausible top speeds", () => {
     const day = analyzeDay(resortDay({ ...VAIL, baseEle: 2500, topEle: 3000, laps: 2, start, runSpeed: 50 }));
     expect(day.flags.length).toBeGreaterThan(0);

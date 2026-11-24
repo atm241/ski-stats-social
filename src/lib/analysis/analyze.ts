@@ -29,7 +29,7 @@ const DRIVE_MAX_GRADE = 0.12;
 const DRIVE_ANY_GRADE_SPEED = 22;
 /** Uphill: lifts top out around 6 m/s; slower climbs at road grades are cars in traffic. */
 const UP_DRIVE_MIN_SPEED = 10;
-const UP_SLOW_DRIVE_MIN_SPEED = 4;
+const UP_SLOW_DRIVE_MIN_SPEED = 6.5; // faster than any detachable lift (~6 m/s), so gentle gondolas stay lifts
 const ROAD_MAX_GRADE = 0.15;
 /** Slow uphill travel is measured on positions a minute apart so GPS jitter doesn't inflate distance. */
 const PATH_SAMPLE_S = 60;

@@ -9,6 +9,7 @@ import { StatTile } from "@/components/StatTile";
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { dayDetail } from "@/lib/days";
+import { mountainSlugForResort } from "@/lib/mountain/registry";
 import { clockTime, duration, feet, miles, mph, prettyDate } from "@/lib/format";
 
 export default async function DayPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +18,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
   if (!day) notFound();
 
   const { track, segments, flagReasons } = dayDetail(day);
+  const hasReplay = !!(await mountainSlugForResort(day.resortName));
   const runs = segments.filter((s) => s.kind === "run");
   const chip = KIND_CHIP[day.kind] ?? KIND_CHIP.resort;
   const isMine = me?.id === day.userId;
@@ -43,6 +45,11 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
             </span>
           </div>
         </div>
+        {hasReplay && (
+          <Link href={`/days/${day.id}/replay`} className="btn-primary">
+            ▶ Watch 3D replay
+          </Link>
+        )}
       </div>
 
       {day.flagged && (
