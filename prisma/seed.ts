@@ -11,6 +11,8 @@ import { saveDay } from "../src/lib/days";
 import type { MountainData } from "../src/lib/mountain/types";
 import { backcountryDay, passLapsDay, resortDay, rng, toGpx } from "../src/lib/sample/generate";
 import { mountainDay } from "../src/lib/sample/mountainDay";
+import { plannedDay } from "../src/lib/sample/plannedDay";
+import { PLANS } from "../src/lib/sample/plans";
 import type { Resort } from "../src/lib/resorts/types";
 
 const resorts = JSON.parse(readFileSync("data/resorts.json", "utf8")) as Resort[];
@@ -24,9 +26,11 @@ type Trip =
   | { resorts: string[]; days: number; from: string }
   | { backcountry: [number, number, number]; days: number; from: string }
   /** real lift & run network from public/mountains/<slug>.json, so the day can be replayed in 3D */
-  | { mountain: string; days: number; from: string }
+  | { mountain: string; days: number; from: string; parkLaps?: number }
   /** ride along with another demo skier's mountain days (same route, `lagS` behind), for "Skied with" */
-  | { mountain: string; days: number; withUser: string; lagS: number };
+  | { mountain: string; days: number; withUser: string; lagS: number }
+  /** one hand-written day from src/lib/sample/plans.ts (e.g. Keystone's Outback + A51) */
+  | { plan: string; days: 1; from: string };
 
 const mountain = (slug: string) => JSON.parse(readFileSync(`public/mountains/${slug}.json`, "utf8")) as MountainData;
 
@@ -117,7 +121,9 @@ const SKIERS: { username: string; displayName: string; avatar: string; color: st
     trips: [
       { mountain: "deer-valley", days: 6, from: "2026-01-10" },
       { mountain: "snowbird-alta", days: 3, from: "2026-02-14" },
-      { mountain: "park-city", days: 3, from: "2026-03-06" },
+      { mountain: "park-city", days: 3, from: "2026-03-06", parkLaps: 4 },
+      { plan: "keystone-outback-a51", days: 1, from: "2026-02-06" },
+      { plan: "park-city-jupiter-to-canyons", days: 1, from: "2026-03-12" },
     ],
   },
   {
@@ -158,10 +164,13 @@ async function main() {
         const start = new Date(new Date(`${date}T09:00:00Z`).getTime() - (lon / 15) * 3600_000);
 
         let points;
-        if ("mountain" in trip) {
+        if ("plan" in trip) {
+          const p = PLANS[trip.plan];
+          points = plannedDay(mountain(p.mountain), { start, seed: seed++, plan: p.plan, endAt: p.endAt }).points;
+        } else if ("mountain" in trip) {
           const params = along
             ? { start: new Date(along.start.getTime() + ("lagS" in trip ? trip.lagS : 0) * 1000), seed: along.seed, laps: along.laps }
-            : { start, seed: seed++, laps: 7 + Math.floor(rand() * 6) };
+            : { start, seed: seed++, laps: 7 + Math.floor(rand() * 6), parkLaps: "parkLaps" in trip && i === 0 ? trip.parkLaps : 0 };
           if (!along) {
             const key = `${s.username}:${trip.mountain}`;
             generatedDays.set(key, [...(generatedDays.get(key) ?? []), { date, ...params }]);

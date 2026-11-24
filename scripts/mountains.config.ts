@@ -5,6 +5,8 @@
  * A landmark sits at a run's midpoint (`run`, exact OSM name), a named peak (`peak`), the middle of a named
  * terrain park or halfpipe (`park`), or a fixed [lon, lat].
  */
+import type { ParkLine } from "../src/lib/mountain/types";
+
 export interface LandmarkSpec {
   name: string;
   kind: "cliff" | "park" | "pipe" | "peak";
@@ -18,7 +20,12 @@ export interface MountainConfig {
   resorts: string[];
   landmarks: LandmarkSpec[];
   /** park features OpenStreetMap doesn't have; coords run downhill, [lon, lat] */
-  parks?: { name: string; kind: "park" | "pipe"; coords: [number, number][] }[];
+  parks?: { name: string; kind: "park" | "pipe"; coords: [number, number][]; line?: ParkLine }[];
+  /**
+   * Runs that are terrain parks though OSM doesn't tag them so (Keystone's A51: Main Street, Park Lane…).
+   * The park follows the run's line; `name` defaults to the run's.
+   */
+  parkRuns?: { run: string; name?: string; line?: ParkLine }[];
 }
 
 export const MOUNTAINS: Record<string, MountainConfig> = {
@@ -29,6 +36,9 @@ export const MOUNTAINS: Record<string, MountainConfig> = {
       { name: "Daly Chutes", kind: "cliff", at: [-111.5185, 40.6097] },
       // rock band the Lady Morgan Express crosses partway up (found in USGS lidar)
       { name: "Lady Morgan cliffs", kind: "cliff", at: [-111.5132, 40.6214] },
+      { name: "Mayflower Bowl", kind: "cliff", run: "Mayflower Bowl" },
+      { name: "Stein's Way", kind: "cliff", run: "Stein's Way" },
+      { name: "Bald Mountain", kind: "peak", peak: "Bald Mountain" },
     ],
   },
   "snowbird-alta": {
@@ -283,10 +293,19 @@ export const MOUNTAINS: Record<string, MountainConfig> = {
     name: "Keystone",
     resorts: ["Keystone"],
     landmarks: [
+      { name: "The Outback", kind: "cliff", run: "Bushwhacker" },
+      { name: "South Bowl", kind: "cliff", run: "South bowl" },
       { name: "Puma Bowl", kind: "cliff", run: "Puma Bowl" },
-      { name: "Packsaddle Bowl", kind: "cliff", run: "Packsaddle Bowl" },
-      { name: "Geronimo", kind: "cliff", run: "Geronimo" },
-      { name: "Ambush", kind: "cliff", run: "Ambush" },
+      { name: "A51", kind: "park", park: "Main Street" },
+      { name: "Independence Mountain", kind: "peak", peak: "Independence Mountain" },
+    ],
+    // A51 terrain park (own lift, A-51): Main Street is the big jump line, Park Lane and The Alley jibs,
+    // I-70 the progression park. OSM maps them as plain runs.
+    parkRuns: [
+      { run: "Main Street", line: "jumps" },
+      { run: "Park Lane", line: "mixed" },
+      { run: "The Alley", line: "jibs" },
+      { run: "I-70", line: "mixed" },
     ],
   },
   "beaver-creek": {

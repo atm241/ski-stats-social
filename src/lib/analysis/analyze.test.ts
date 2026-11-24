@@ -53,6 +53,13 @@ describe("analyzeDay", () => {
     expect(day.segments.some((s) => s.kind === "drive")).toBe(false);
   });
 
+  it("counts a nearly flat gondola as a lift, not a skin", () => {
+    // e.g. Park City's Quicksilver Gondola: ~5% grade at 4.5 m/s, too slow a climb for a chair but far too fast for a skinner
+    const day = analyzeDay(resortDay({ ...VAIL, baseEle: 2400, topEle: 2530, laps: 3, start, liftGrade: 0.055, liftSpeed: 4.5 }));
+    expect(day.liftCount).toBe(3);
+    expect(day.segments.some((s) => s.kind === "skin")).toBe(false);
+  });
+
   it("flags implausible top speeds", () => {
     const day = analyzeDay(resortDay({ ...VAIL, baseEle: 2500, topEle: 3000, laps: 2, start, runSpeed: 50 }));
     expect(day.flags.length).toBeGreaterThan(0);

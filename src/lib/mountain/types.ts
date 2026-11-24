@@ -1,4 +1,6 @@
 /** Prebuilt 3D mountain dataset (see scripts/build-mountain.ts). Coordinates are [lon, lat]. */
+export type ParkLine = "jumps" | "jibs" | "mixed";
+
 export interface MountainData {
   slug: string;
   /** display name, e.g. "Snowbird & Alta" */
@@ -33,7 +35,13 @@ export interface MountainData {
     source: string;
   };
   /** Terrain parks and halfpipes (scripts/build-parks.ts): downhill centrelines, [lon, lat]. */
-  parks?: { name: string | null; kind: "park" | "pipe"; coords: [number, number][] }[];
+  /**
+   * Terrain parks and halfpipes as downhill centrelines. `line` says what's on a park:
+   * a jump line (kickers), a jib line (boxes and rails), or a mix (default).
+   */
+  parks?: { name: string | null; kind: "park" | "pipe"; coords: [number, number][]; line?: ParkLine }[];
+  /** marked boot-pack / hike-to routes (OSM piste:type=hike), bottom → top */
+  hikes?: { name: string | null; coords: [number, number][] }[];
   /** Lidar-derived exposed rock (scripts/build-cliffs.ts). */
   cliffs?: {
     cellM: number;

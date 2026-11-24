@@ -23,6 +23,9 @@ const MIN_LEG_M = 30;
 const FLAT_TRIM_M = 3;
 /** Chairlifts climb ~1–3 m/s, strong skinners ~0.3 m/s. */
 const LIFT_MIN_VERTICAL_RATE = 0.45;
+/** Nobody skins or bootpacks faster than ~1.5 m/s over the ground, so a slow-climbing but quick traverse
+ * (Park City's Quicksilver Gondola: ~5% grade at 4.5 m/s) is a lift. */
+const SKIN_MAX_SPEED = 2.5;
 /** Downhill: fast and road-gentle is a car; faster than any sustained skiing is a car regardless. */
 const DRIVE_MIN_SPEED = 12;
 const DRIVE_MAX_GRADE = 0.12;
@@ -193,7 +196,7 @@ export function analyzeDay(points: TrackPoint[]): DayStats {
     else if (up) {
       const grade = vertical / Math.max(pathDistance(s, e), 1);
       if (avgSpeed > UP_DRIVE_MIN_SPEED || (avgSpeed > UP_SLOW_DRIVE_MIN_SPEED && grade < ROAD_MAX_GRADE)) kind = "drive";
-      else if (verticalRate >= LIFT_MIN_VERTICAL_RATE) kind = "lift";
+      else if (verticalRate >= LIFT_MIN_VERTICAL_RATE || pathDistance(s, e) / activeS >= SKIN_MAX_SPEED) kind = "lift";
       else kind = "skin";
     } else {
       const grade = vertical / Math.max(distanceM, 1);

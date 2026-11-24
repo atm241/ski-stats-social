@@ -12,6 +12,7 @@ import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import type { StoredTrack } from "@/lib/analysis/process";
 import type { Segment } from "@/lib/analysis/types";
 import { buildMountainScene } from "@/lib/mountain/buildScene";
+import { createParkTricks, type TrickFrame } from "@/lib/mountain/park";
 import { type Activity, buildTimeline, indexAt, type ReplayPoint } from "@/lib/mountain/replay";
 import { createSkier } from "@/lib/mountain/skier";
 import { createStage } from "@/lib/mountain/stage";
@@ -21,6 +22,10 @@ const FT = 3.28084;
 const LENGTHS_MIN = [1, 3, 5];
 const SPEEDS = [1, 2, 4];
 const MAX_LINE_GAP_MIN = 20; // idle shorter than this between a run and a lift = lift line
+/** In the park the replay slows so each trick plays at about this many diorama meters per second. */
+const TRICK_SPEED = 22;
+/** ...and the camera moves in to this distance, at a three-quarter side angle so spins read. */
+const PARK_CAM_DIST = 150;
 const TRAIL: Record<Activity, string> = { run: "#ff4f8b", lift: "#8a90a0", skin: "#e07b39", drive: "#c4c8d0", idle: "#c4c8d0" };
 
 interface Hud {
@@ -30,6 +35,8 @@ interface Hud {
   verticalFt: number;
   run: number;
   runs: number;
+  /** set while a park trick is playing; tricks are simulated until we can measure them */
+  trick?: { label: string; source: "simulated" | "measured" };
 }
 
 interface Engine {
@@ -80,6 +87,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       stage.peakLabels.visible = false;
 
       const tl = buildTimeline(track, segments, built.terrain, data);
+      const park = createParkTricks(built.parkFeatures, built.terrain);
       const pts = tl.points;
       const n = pts.length;
       const clockFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone });
@@ -212,6 +220,22 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         ctx.fillText(hudNow.label.slice(0, 36), 64 * u, 96 * u);
         ctx.fillStyle = "#8b95a8";
         ctx.fillText(`${hudNow.verticalFt.toLocaleString()} ft · run ${hudNow.run} of ${hudNow.runs}`, 44 * u, 126 * u);
+        if (hudNow.trick) {
+          ctx.fillStyle = "rgba(9,11,16,0.78)";
+          ctx.beginPath();
+          ctx.roundRect(24 * u, 150 * u, 430 * u, 46 * u, 12 * u);
+          ctx.fill();
+          ctx.fillStyle = "#5cc8ff";
+          ctx.font = `600 ${20 * u}px ${font}`;
+          ctx.fillText(hudNow.trick.label, 44 * u, 180 * u);
+          if (hudNow.trick.source === "simulated") {
+            ctx.fillStyle = "#8b95a8";
+            ctx.font = `500 ${14 * u}px ${font}`;
+            ctx.textAlign = "right";
+            ctx.fillText("simulated", 436 * u, 179 * u);
+            ctx.textAlign = "left";
+          }
+        }
         ctx.font = `600 ${18 * u}px ${font}`;
         ctx.fillStyle = "rgba(9,11,16,0.7)";
         ctx.fillText(title, 24 * u, h - 24 * u);
@@ -240,9 +264,15 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       let chunks: Blob[] = [];
 
       let hudTimer = 0;
+      let slow = 1; // park slow-motion factor on the playback rate
+      let trick: TrickFrame | null = null;
+      let parkBlend = 0; // 0 = normal follow camera, 1 = close park camera
+      let normalRadius = 0;
+      let parkDir = 0; // smoothed direction down the park, steadier than the skier's yaw in a pipe
+      let inPipe = false; // pipe walls hide a side view: film it from high behind instead
       stage.onFrame((dt) => {
         if (isPlaying) {
-          playhead = Math.min(tl.rawLength, playhead + dt * rate());
+          playhead = Math.min(tl.rawLength, playhead + dt * rate() * slow);
           if (playhead >= tl.rawLength) {
             isPlaying = false;
             setPlaying(false);
@@ -252,10 +282,29 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         const { i, a, b } = sampleAt(playhead);
         const dx = b.x - a.x;
         const dz = b.z - a.z;
-        if (Math.hypot(dx, dz) > 1) yaw = lerpAngle(yaw, Math.atan2(dx, dz), 1 - Math.exp(-dt * 6));
+        const travel = Math.atan2(dx, dz);
+
+        // Park: put the skier on the feature and slow down so the trick is watchable.
+        trick = null;
+        let slowTarget = 1;
+        let inPark = false;
+        if (park.count && a.activity === "run" && Math.hypot(dx, dz) > 1) {
+          trick = park.at(pos.x, pos.z, travel, a.segment);
+          inPark = !!trick || park.near(pos.x, pos.z, travel);
+          if (inPark) {
+            const metersPerS = Math.hypot(dx, dz) / Math.max(0.5, (b.t - a.t) / 1000);
+            slowTarget = Math.min(1, TRICK_SPEED / Math.max(1, metersPerS * rate()));
+          }
+        }
+        // drop into slow motion at once (or we'd fly past the feature), ease back out
+        slow = slowTarget < slow ? slowTarget : slow + (slowTarget - slow) * (1 - Math.exp(-dt * 2.5));
+        if (trick) {
+          pos.set(trick.position.x, trick.position.y, trick.position.z);
+          yaw = lerpAngle(yaw, trick.heading, 1 - Math.exp(-dt * 20));
+        } else if (Math.hypot(dx, dz) > 1) yaw = lerpAngle(yaw, travel, 1 - Math.exp(-dt * 6));
         skier.object.position.copy(pos);
         skier.object.rotation.y = yaw;
-        skier.pose(a.activity, isPlaying ? dt * Math.min(2, speedX) : 0);
+        skier.pose(a.activity, isPlaying ? dt * Math.min(2, speedX) : 0, trick);
         marker.position.copy(pos).add(new THREE.Vector3(0, skier.height + 10, 0));
         trailGeo.instanceCount = i;
 
@@ -263,10 +312,19 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         offset.copy(pos).add(new THREE.Vector3(0, 8, 0)).sub(controls.target);
         controls.target.add(offset);
         camera.position.add(offset);
+        parkBlend += ((inPark ? 1 : 0) - parkBlend) * (1 - Math.exp(-dt * 2.5));
+        if (trick) inPipe = trick.feature === "pipe";
+        if (inPark) parkDir = lerpAngle(parkDir, travel, 1 - Math.exp(-dt * 2));
+        else parkDir = yaw;
         if (performance.now() - lastUser > 4000 && isPlaying) {
           offset.copy(camera.position).sub(controls.target);
           sph.setFromVector3(offset);
-          sph.theta = lerpAngle(sph.theta, yaw + Math.PI, 1 - Math.exp(-dt * 0.7));
+          if (parkBlend < 0.02) normalRadius = sph.radius;
+          // behind the skier normally; in the park, swing round to a three-quarter side view, closer and lower
+          const behind = (parkBlend > 0.02 ? parkDir : yaw) + Math.PI * (1 - (inPipe ? 0.12 : 0.4) * parkBlend);
+          sph.theta = lerpAngle(sph.theta, behind, 1 - Math.exp(-dt * (0.7 + 2 * parkBlend)));
+          sph.radius = normalRadius + ((inPipe ? PARK_CAM_DIST * 1.3 : PARK_CAM_DIST) - normalRadius) * parkBlend;
+          sph.phi += ((inPipe ? 0.75 : 1.15) - sph.phi) * (1 - Math.exp(-dt * 2)) * parkBlend;
           camera.position.copy(controls.target).add(offset.setFromSpherical(sph));
         }
 
@@ -275,6 +333,10 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
           hudTimer = 0.12;
           const d = describe(a, i);
           hudNow = { clock: clockFmt.format(a.t), ...d, verticalFt: Math.round(a.verticalM * FT), run: runNo[i], runs };
+          if (trick) {
+            hudNow.trick = { label: trick.trick.label, source: trick.trick.source };
+            if (trick.park) hudNow.label = `Skiing ${trick.park}`; // the pipe isn't a named run
+          }
           setHud(hudNow);
           setProgress(playhead / tl.rawLength);
           if (recorder) setRecording({ elapsed: (performance.now() - recordStart) / 1000 });
@@ -349,6 +411,16 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
             <div className="num mt-1 text-xs text-ink-soft">
               {hud.verticalFt.toLocaleString()} ft · run {hud.run} of {hud.runs}
             </div>
+            {hud.trick && (
+              <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2">
+                <span className="text-sm font-semibold text-accent">{hud.trick.label}</span>
+                {hud.trick.source === "simulated" && (
+                  <span className="chip px-1.5! py-0! text-[10px]!" title="GPS shows you skied the park, not which features or spins. Tricks are illustrative until we can measure them.">
+                    simulated
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
         {recording && (

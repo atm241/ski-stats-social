@@ -4,8 +4,9 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { cliffIndex } from "./cliffs";
+import type { ParkFeature } from "./park";
 import { createTerrain, densify, type Terrain } from "./terrain";
-import type { MountainData } from "./types";
+import type { MountainData, ParkLine } from "./types";
 
 /*
  * Low-poly "diorama" of a resort: flat-shaded snowy terrain on a layered earth base,
@@ -63,6 +64,10 @@ const CABLE_CLEARANCE = 30;
 const TOWER_SPACING = 160;
 /** Diorama scale: trees, cabins and buildings are drawn larger than life so they read from far away. */
 const PROP_SCALE = 2.2;
+/** Upper elevation limit for oak/maple scrub (Wasatch & Colorado: roughly 8,000–8,500 ft). */
+const SCRUB_MAX_ELE_M = 2500;
+/** Rough cap on trees per mountain (instanced, but each still costs vertices every frame). */
+const TREE_BUDGET = 70_000;
 const CABIN_SPACING = { gondola: 70, chair: 45 };
 
 export interface RunPick {
@@ -95,6 +100,8 @@ export interface MountainScene {
   /** cameras looking at each landmark (cliffs from below, parks from the side) */
   landmarkViews: { name: string; kind: string; position: THREE.Vector3; target: THREE.Vector3 }[];
   runRibbon: (runIndex: number) => THREE.BufferGeometry;
+  /** rails, boxes, kickers and halfpipes as built, for the replay's park tricks */
+  parkFeatures: ParkFeature[];
   dispose: () => void;
 }
 
@@ -233,8 +240,11 @@ export function buildMountainScene(data: MountainData): MountainScene {
     runForFace.set(mesh, faces);
   }
 
-  // --- trees, kept off the runs
-  const MASK_M = 20;
+  // --- trees, kept off the runs. With a satellite forest layer the cut runs are already open ground,
+  // so the mask only keeps trees off the drawn ribbons (±15 m); a wide margin wiped out real tree
+  // islands between close runs (Deer Valley's Stein's Way / Perseverance). Without one, clear widely.
+  const MASK_M = 10;
+  const pad = data.forest ? 1 : 4;
   const mCols = Math.ceil(widthM / MASK_M);
   const mRows = Math.ceil(depthM / MASK_M);
   const clear = new Uint8Array(mCols * mRows);
@@ -248,12 +258,12 @@ export function buildMountainScene(data: MountainData): MountainScene {
         if (C >= 0 && R >= 0 && C < mCols && R < mRows) clear[R * mCols + C] = 1;
       }
   };
-  for (const path of runPaths) for (const [x, z] of densify(path, 8)) mark(x, z, 2);
-  for (const l of data.lifts) for (const [x, z] of densify(l.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)), 8)) mark(x, z, 0);
-  for (const p of data.parks ?? []) for (const [x, z] of densify(p.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)), 8)) mark(x, z, p.kind === "pipe" ? 3 : 2);
+  for (const path of runPaths) for (const [x, z] of densify(path, 5)) mark(x, z, pad);
+  for (const l of data.lifts) for (const [x, z] of densify(l.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)), 5)) mark(x, z, 1);
+  for (const p of data.parks ?? []) for (const [x, z] of densify(p.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)), 5)) mark(x, z, p.kind === "pipe" ? 6 : 4);
 
   const isClear = (x: number, z: number) =>
-    Math.abs(x) < hw - 10 && Math.abs(z) < hd - 10 && !clear[Math.floor((z + hd) / MASK_M) * mCols + Math.floor((x + hw) / MASK_M)] && cliffs.rockFraction(x, z, 10) === 0;
+    Math.abs(x) < hw - 10 && Math.abs(z) < hd - 10 && !clear[Math.floor((z + hd) / MASK_M) * mCols + Math.floor((x + hw) / MASK_M)] && cliffs.rockFraction(x, z, 5) === 0 && cliffs.rockFraction(x, z, 12) < 0.2; // among scattered rock (Mayflower Bowl), never on it
   const slopeAt = (x: number, z: number) => {
     const dx = (terrain.yAt(x + 20, z) - terrain.yAt(x - 20, z)) / 40;
     const dz = (terrain.yAt(x, z + 20) - terrain.yAt(x, z - 20)) / 40;
@@ -268,7 +278,11 @@ export function buildMountainScene(data: MountainData): MountainScene {
     if (c < 0 || r < 0 || c >= forest.cols || r >= forest.rows) return null;
     const v = forest.cells[r * forest.cols + c];
     if (v === "0") return null;
-    return { kind: v === "1" ? "pine" : v === "2" ? "aspen" : "scrub", h: parseInt(forest.heights[r * forest.cols + c], 36) * 2 };
+    const h = parseInt(forest.heights[r * forest.cols + c], 36) * 2;
+    // Gambel oak / maple thin out above ~2,500 m; low deciduous canopy up there is young or stunted
+    // aspen (Deer Valley's Mayflower Bowl), so draw it as aspen rather than oak thicket.
+    if (v === "3" && terrain.elevationAt(x, z) > SCRUB_MAX_ELE_M) return { kind: "aspen", h: Math.max(h, 8) };
+    return { kind: v === "1" ? "pine" : v === "2" ? "aspen" : "scrub", h };
   };
   /** Real canopy height → diorama scale, so a 20 m spruce stand towers over a 4 m oak thicket. */
   const sizeFor = (kind: TreeKind, h: number) => {
@@ -278,7 +292,11 @@ export function buildMountainScene(data: MountainData): MountainScene {
   };
 
   const spots: Record<TreeKind, { x: number; z: number; s: number }[]> = { pine: [], aspen: [], scrub: [] };
-  const STEP = forest ? 34 : 40;
+  // One tree per STEP×STEP of forest: dense (24 m) where the budget allows, wider on the giant maps
+  // (Park City, Vail) so the tree count, and the frame rate, stays about where Deer Valley's is.
+  let woodedM2 = 0;
+  if (forest) for (const ch of forest.cells) if (ch !== "0") woodedM2 += forest.cellM * forest.cellM;
+  const STEP = forest ? Math.max(24, Math.sqrt(woodedM2 / TREE_BUDGET)) : 40;
   for (let z = -hd + STEP / 2; z < hd; z += STEP)
     for (let x = -hw + STEP / 2; x < hw; x += STEP) {
       const tx = x + (rand() - 0.5) * STEP;
@@ -375,10 +393,16 @@ export function buildMountainScene(data: MountainData): MountainScene {
   }
 
   // --- terrain parks (kickers, boxes, rails down the park line) and halfpipes (a U-channel swept down its line)
+  const parkFeatures: ParkFeature[] = [];
   if (data.parks?.length) {
     const parkMat = track(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8 }));
     const pieces = { kicker: track(kicker()), box: track(parkBox()), rail: track(parkRail()) };
-    const cycle: (keyof typeof pieces)[] = ["kicker", "box", "kicker", "rail", "kicker", "box"];
+    // what's laid down a park line, and how far apart (a jump line needs room to land)
+    const LINES: Record<ParkLine, { cycle: (keyof typeof pieces)[]; gap: number }> = {
+      mixed: { cycle: ["kicker", "box", "kicker", "rail", "kicker", "box"], gap: 42 },
+      jumps: { cycle: ["kicker"], gap: 58 },
+      jibs: { cycle: ["box", "rail", "rail", "box"], gap: 34 },
+    };
     const q = new THREE.Quaternion();
     const pitchQ = new THREE.Quaternion();
     const yAxis = new THREE.Vector3(0, 1, 0);
@@ -388,6 +412,8 @@ export function buildMountainScene(data: MountainData): MountainScene {
       if (path.length < 2) continue;
       if (park.kind === "pipe") {
         const geo = track(halfpipe(path, terrain));
+        const fit = pipeFloor(path, terrain);
+        parkFeatures.push({ kind: "pipe", park: park.name, path, floor0: fit.floor0, floorSlope: fit.slope, halfFlat: PIPE.FLAT / 2, radius: PIPE.R });
         const mesh = new THREE.Mesh(geo, parkMat);
         mesh.name = `pipe:${park.name ?? ""}`;
         mesh.castShadow = true;
@@ -396,14 +422,15 @@ export function buildMountainScene(data: MountainData): MountainScene {
         continue;
       }
       let dist = 0;
-      let next = 30;
+      const { cycle, gap } = LINES[park.line ?? "mixed"];
+      let next = 50; // clear of the lift station that often sits at the top of a park
       let k = 0;
       for (let i = 1; i < path.length - 1; i++) {
         const [x0, z0] = path[i - 1];
         const [x1, z1] = path[i];
         dist += Math.hypot(x1 - x0, z1 - z0);
         if (dist < next) continue;
-        next += 42;
+        next += gap;
         const kind = cycle[k++ % cycle.length];
         const [xa, za] = path[Math.max(0, i - 3)];
         const [xb, zb] = path[Math.min(path.length - 1, i + 3)];
@@ -420,6 +447,10 @@ export function buildMountainScene(data: MountainData): MountainScene {
         mesh.receiveShadow = true;
         mesh.name = `park:${kind}`;
         root.add(mesh);
+        // the line a skier rides, in world space (root is untransformed)
+        mesh.updateMatrix();
+        const [a, b] = RIDE_LINE[kind].map(([y, z]) => new THREE.Vector3(0, y, z).applyMatrix4(mesh.matrix));
+        parkFeatures.push({ kind, park: park.name, start: { x: a.x, y: a.y, z: a.z }, end: { x: b.x, y: b.y, z: b.z } });
       }
     }
   }
@@ -429,6 +460,23 @@ export function buildMountainScene(data: MountainData): MountainScene {
   const lineMaterials: LineMaterial[] = [];
   const cableMat = track(new LineMaterial({ color: 0x555a66, linewidth: 1.1, worldUnits: false, transparent: true, opacity: 0.8 }));
   lineMaterials.push(cableMat);
+
+  // --- marked hike-to routes (boot packs): dashed amber lines hugging the snow
+  if (data.hikes?.length) {
+    const hikeMat = track(new LineMaterial({ color: 0xe0a020, linewidth: 2.2, worldUnits: false, dashed: true, dashSize: 16, gapSize: 10, transparent: true, opacity: 0.95 }));
+    lineMaterials.push(hikeMat);
+    for (const hike of data.hikes) {
+      const path = densify(hike.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)), 6);
+      if (path.length < 2) continue;
+      const g = new LineGeometry();
+      g.setPositions(path.flatMap(([x, z]) => [x, terrain.yAt(x, z) + 3, z]));
+      const line = new Line2(g, hikeMat);
+      line.computeLineDistances();
+      line.name = `hike:${hike.name ?? ""}`;
+      root.add(line);
+      disposables.push({ dispose: () => g.dispose() });
+    }
+  }
   const towers: { pos: THREE.Vector3; yaw: number }[] = [];
   const cabins: { pos: THREE.Vector3; yaw: number; gondola: boolean }[] = [];
   const stationSpots: { pos: THREE.Vector3; yaw: number; gondola: boolean }[] = [];
@@ -578,6 +626,7 @@ export function buildMountainScene(data: MountainData): MountainScene {
     liftForStation,
     lineMaterials,
     peaks,
+    parkFeatures,
     runRibbon: (i) => {
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(ribbon(runPaths[i], RUN_WIDTH * 1.6, RUN_LIFT + 1), 3));
@@ -704,6 +753,13 @@ function paint(g: THREE.BufferGeometry, color: THREE.Color) {
  * Low-poly kicker (jump), local +z = downhill. A curved ramp up to a lip, then a short knuckle:
  * snow-white take-off with blue-grey sides and a blue painted lip line.
  */
+/** Each prop's riding line in its local frame, [height, z] uphill → downhill (kicker: ramp foot → lip). */
+const RIDE_LINE: Record<"kicker" | "box" | "rail", [number, number][]> = {
+  kicker: [[0, -4.5], [2.9, 4.5]],
+  box: [[1.02, -4.5], [1.02, 4.5]],
+  rail: [[1.34, -5], [1.34, 5]],
+};
+
 function kicker(): THREE.BufferGeometry {
   const L = 9;
   const H = 2.6;
@@ -752,23 +808,13 @@ function parkRail(): THREE.BufferGeometry {
  * drawn PARK_SCALE× like the other props. The floor follows a straight-line fit of the ground so the pipe
  * keeps an even grade instead of copying every bump of the 40 m terrain.
  */
-function halfpipe(path: [number, number][], terrain: Terrain): THREE.BufferGeometry {
-  const S = PARK_SCALE;
-  const R = 6.7 * S;
-  const FLAT = 8 * S;
-  const VERT = 0.4 * S;
-  const DECK = 4 * S;
-  const DIG = R * 0.55; // how far the floor sits below the surrounding snow
-  // cross-section, left deck edge → right deck edge: [sideways offset, height above floor]
-  const half: [number, number][] = [[FLAT / 2 + R + DECK + R * 0.6, DIG - 1], [FLAT / 2 + R + DECK, R + VERT], [FLAT / 2 + R, R + VERT], [FLAT / 2 + R, R]];
-  for (let i = 1; i < 6; i++) {
-    const a = (Math.PI / 2) * (i / 6);
-    half.push([FLAT / 2 + R * Math.cos(a), R - R * Math.sin(a)]);
-  }
-  half.push([FLAT / 2, 0]);
-  const profile = [...half, ...half.slice().reverse().map(([o, h]) => [-o, h] as [number, number])];
+const PIPE = { R: 6.7 * PARK_SCALE, FLAT: 8 * PARK_SCALE, VERT: 0.4 * PARK_SCALE, DECK: 4 * PARK_SCALE };
 
-  // distance along the path and a linear fit of ground height → even grade
+/**
+ * Even grade for a pipe floor: a straight-line fit of ground height against distance along the path,
+ * dug in by part of the wall height. floor(d) = floor0 + slope × d.
+ */
+function pipeFloor(path: [number, number][], terrain: Terrain) {
   const d: number[] = [0];
   for (let i = 1; i < path.length; i++) d.push(d[i - 1] + Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]));
   const ys = path.map(([x, z]) => terrain.yAt(x, z));
@@ -782,7 +828,26 @@ function halfpipe(path: [number, number][], terrain: Terrain): THREE.BufferGeome
     den += (d[i] - md) ** 2;
   }
   const slope = den ? num / den : 0;
-  const floorAt = (i: number) => my + slope * (d[i] - md) - DIG;
+  const dig = PIPE.R * 0.55; // how far the floor sits below the surrounding snow
+  return { along: d, slope, floor0: my - slope * md - dig };
+}
+
+function halfpipe(path: [number, number][], terrain: Terrain): THREE.BufferGeometry {
+  const { R, FLAT, VERT, DECK } = PIPE;
+  const DIG = R * 0.55;
+  // cross-section, left deck edge → right deck edge: [sideways offset, height above floor]
+  const half: [number, number][] = [[FLAT / 2 + R + DECK + R * 0.6, DIG - 1], [FLAT / 2 + R + DECK, R + VERT], [FLAT / 2 + R, R + VERT], [FLAT / 2 + R, R]];
+  for (let i = 1; i < 6; i++) {
+    const a = (Math.PI / 2) * (i / 6);
+    half.push([FLAT / 2 + R * Math.cos(a), R - R * Math.sin(a)]);
+  }
+  half.push([FLAT / 2, 0]);
+  const profile = [...half, ...half.slice().reverse().map(([o, h]) => [-o, h] as [number, number])];
+
+  // even grade instead of copying every bump of the 40 m terrain
+  const fit = pipeFloor(path, terrain);
+  const n = path.length;
+  const floorAt = (i: number) => fit.floor0 + fit.slope * fit.along[i];
 
   const pos: number[] = [];
   const col: number[] = [];

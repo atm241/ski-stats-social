@@ -38,6 +38,8 @@ export interface MountainDayOptions {
   laps?: number;
   /** horizontal skiing speed range, m/s */
   skiSpeed?: [number, number];
+  /** start the day with this many laps through the terrain parks / halfpipe (on the lift that serves them) */
+  parkLaps?: number;
 }
 
 const dist = (a: LonLat, b: LonLat) => haversine(a[1], a[0], b[1], b[0]);
@@ -111,9 +113,79 @@ export function mountainDay(data: MountainData, o: MountainDayOptions): { points
   usable = new Set([...usable]);
 
   // --- generate GPS points
-  const points: TrackPoint[] = [];
+  const rec = trackRecorder(o.start, rand, ele);
+  const { points, wait, travel } = rec;
   const itinerary: ItineraryStep[] = [];
-  let t = o.start.getTime();
+  let here: LonLat = [0, 0];
+  const emit = (p: LonLat, elevation: number) => {
+    rec.emit(p, elevation);
+    here = p;
+  };
+  const sync = () => (here = rec.here());
+  const [vMin, vMax] = o.skiSpeed ?? [7, 12];
+  const skiSpeed = () => vMin + rand() * (vMax - vMin);
+
+  const laps = o.laps ?? 10;
+  let lift = pick([...usable]);
+
+  // Park laps: the usable lift whose bottom is nearest each park's bottom and whose top is above it.
+  const parks = (data.parks ?? [])
+    .filter((p) => p.coords.length >= 2)
+    .map((p) => ({ name: p.name ?? (p.kind === "pipe" ? "Halfpipe" : "Terrain park"), coords: (ele(p.coords[0]) >= ele(p.coords.at(-1)!) ? p.coords : [...p.coords].reverse()) as LonLat[] }))
+    .map((p) => {
+      const candidates = [...usable].filter((l) => ele(l.coords.at(-1)!) > ele(p.coords[0]) + 10);
+      const near = (l: Lift) => dist(l.coords[0], p.coords.at(-1)!) + dist(l.coords.at(-1)!, p.coords[0]) * 0.5;
+      return { ...p, lift: candidates.sort((a, b) => near(a) - near(b))[0] };
+    })
+    .filter((p) => p.lift);
+  const parkLaps = parks.length ? (o.parkLaps ?? 0) : 0;
+  if (parkLaps) lift = parks[0].lift;
+  emit(lift.coords[0], ele(lift.coords[0]) + 1.5);
+  for (let k = 0; k < parkLaps; k++) {
+    const park = parks[k % parks.length];
+    sync();
+    if (dist(here, park.lift.coords[0]) > 5) travel([here, park.lift.coords[0]], () => 3);
+    wait(60 + rand() * 120, park.lift.coords[0]);
+    itinerary.push({ kind: "lift", name: park.lift.name });
+    travel(park.lift.coords, () => park.lift.speed, true);
+    wait(20 + rand() * 40, park.lift.coords.at(-1)!);
+    travel([rec.here(), park.coords[0]], skiSpeed); // ski over to the park
+    itinerary.push({ kind: "run", name: park.name });
+    travel(park.coords, () => 8 + rand() * 2);
+    travel([rec.here(), park.lift.coords[0]], skiSpeed);
+    lift = park.lift;
+  }
+  for (let lap = 0; lap < laps; lap++) {
+    wait(60 + rand() * 240, lift.coords[0]); // lift line
+    itinerary.push({ kind: "lift", name: lift.name });
+    travel(lift.coords, () => lift.speed, true);
+    wait(20 + rand() * 60, lift.coords.at(-1)!); // strap in, look around
+
+    let descent: { runs: Run[]; lift: Lift } | null = null;
+    for (let k = 0; k < 20 && !descent; k++) descent = descend(lift.coords.at(-1)!, usable);
+    descent ??= known.get(lift)!;
+    for (const r of descent.runs) {
+      sync();
+      if (dist(here, r.coords[0]) > 5) travel([here, r.coords[0]], () => 3); // skate over to the run
+      itinerary.push({ kind: "run", name: r.name });
+      travel(r.coords, skiSpeed);
+      if (rand() < 0.3) wait(20 + rand() * 60, r.coords.at(-1)!); // regroup
+    }
+    lift = descent.lift;
+    sync();
+    if (dist(here, lift.coords[0]) > 5) travel([here, lift.coords[0]], () => 3);
+    if (lap === Math.floor(laps / 2)) wait(45 * 60, lift.coords[0]); // lunch
+  }
+  return { points, itinerary };
+}
+
+/**
+ * Writes a synthetic GPS track: a point every STEP_S seconds with a little position and altitude noise.
+ * `travel` moves along a polyline (terrain elevation, or a straight cable for lifts); `wait` stands still.
+ */
+export function trackRecorder(start: Date, rand: () => number, ele: (p: LonLat) => number) {
+  const points: TrackPoint[] = [];
+  let t = start.getTime();
   let here: LonLat = [0, 0];
   const noise = () => (rand() + rand() + rand() - 1.5) * 1.2;
   const emit = (p: LonLat, elevation: number) => {
@@ -128,7 +200,6 @@ export function mountainDay(data: MountainData, o: MountainDayOptions): { points
       emit(p, ele(p) + 1.5);
     }
   };
-  /** Moves along a polyline; elevation from terrain, or linearly between its ends for lifts. */
   const travel = (coords: LonLat[], speed: () => number, onCable = false) => {
     const total = coords.reduce((s, c, i) => (i ? s + dist(coords[i - 1], c) : 0), 0);
     const e0 = ele(coords[0]) + 8;
@@ -143,36 +214,10 @@ export function mountainDay(data: MountainData, o: MountainDayOptions): { points
         const f = s / len;
         const p: LonLat = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
         t += STEP_S * 1000;
-        emit(p, onCable ? e0 + ((e1 - e0) * (along + s)) / total : ele(p) + 1.5);
+        emit(p, onCable && total > 0 ? e0 + ((e1 - e0) * (along + s)) / total : ele(p) + 1.5);
       }
       along += len;
     }
   };
-  const [vMin, vMax] = o.skiSpeed ?? [7, 12];
-  const skiSpeed = () => vMin + rand() * (vMax - vMin);
-
-  const laps = o.laps ?? 10;
-  let lift = pick([...usable]);
-  here = lift.coords[0];
-  emit(here, ele(here) + 1.5);
-  for (let lap = 0; lap < laps; lap++) {
-    wait(60 + rand() * 240, lift.coords[0]); // lift line
-    itinerary.push({ kind: "lift", name: lift.name });
-    travel(lift.coords, () => lift.speed, true);
-    wait(20 + rand() * 60, lift.coords.at(-1)!); // strap in, look around
-
-    let descent: { runs: Run[]; lift: Lift } | null = null;
-    for (let k = 0; k < 20 && !descent; k++) descent = descend(lift.coords.at(-1)!, usable);
-    descent ??= known.get(lift)!;
-    for (const r of descent.runs) {
-      if (dist(here, r.coords[0]) > 5) travel([here, r.coords[0]], () => 3); // skate over to the run
-      itinerary.push({ kind: "run", name: r.name });
-      travel(r.coords, skiSpeed);
-      if (rand() < 0.3) wait(20 + rand() * 60, r.coords.at(-1)!); // regroup
-    }
-    lift = descent.lift;
-    if (dist(here, lift.coords[0]) > 5) travel([here, lift.coords[0]], () => 3);
-    if (lap === Math.floor(laps / 2)) wait(45 * 60, lift.coords[0]); // lunch
-  }
-  return { points, itinerary };
+  return { points, emit, wait, travel, here: () => here };
 }

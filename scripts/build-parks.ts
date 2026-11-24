@@ -6,7 +6,8 @@
  *
  * From OpenStreetMap: piste:type=snow_park / halfpipe features, and downhill runs described or named as
  * terrain parks (Park City tags 3 Kings and Pick'n Shovel with description="Terrain Park").
- * Plus hand-placed features from scripts/mountains.config.ts (`parks`), for things OSM doesn't have yet.
+ * Plus hand-placed features from scripts/mountains.config.ts (`parks`, or `parkRuns` for runs that are parks),
+ * for things OSM doesn't have yet. Also the marked hike-to routes (piste:type=hike), e.g. Keystone's Outback.
  * Each becomes a downhill centreline; the viewer lays out jumps, boxes and rails (parks) or a pipe along it.
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -31,6 +32,7 @@ async function main() {
     way["piste:type"~"^(snow_park|halfpipe)$"](${south},${west},${north},${east});
     way["piste:type"="downhill"]["description"~"[Tt]errain [Pp]ark"](${south},${west},${north},${east});
     way["piste:type"="downhill"]["name"~"([Tt]errain [Pp]ark|[Hh]alf ?[Pp]ipe|[Ss]uper ?[Pp]ipe)"](${south},${west},${north},${east});
+    way["piste:type"="hike"](${south},${west},${north},${east});
   );out geom;`;
   type El = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
   let els: El[];
@@ -42,8 +44,10 @@ async function main() {
     els = [];
   }
 
-  const configNames = new Set((MOUNTAINS[slug]?.parks ?? []).map((p) => p.name));
+  const configNames0 = (MOUNTAINS[slug]?.parks ?? []).map((p) => p.name);
+  const configNames = new Set([...configNames0, ...(MOUNTAINS[slug]?.parkRuns ?? []).map((p) => p.name ?? p.run)]);
   const parks: NonNullable<MountainData["parks"]> = els.length ? [] : (data.parks ?? []).filter((p) => !configNames.has(p.name ?? ""));
+  const hikes: NonNullable<MountainData["hikes"]> = els.length ? [] : (data.hikes ?? []);
   // Only parks on this mountain: the map's edges reach into neighbours (Park City's touches Solitude).
   const ourRunPts = data.runs.flatMap((r) => r.coords.map(([lon, lat]) => terrain.toXZ(lon, lat)));
   const nearOurRuns = (g: { lat: number; lon: number }[]) =>
@@ -57,6 +61,11 @@ async function main() {
       continue;
     }
     let line = e.geometry!.map((p) => [+p.lon.toFixed(6), +p.lat.toFixed(6)] as [number, number]);
+    if (e.tags?.["piste:type"] === "hike") {
+      if (ele(line[0]) > ele(line[line.length - 1])) line.reverse(); // store uphill
+      hikes.push({ name: e.tags?.name ?? null, coords: line });
+      continue;
+    }
     const closed = line.length > 3 && line[0][0] === line[line.length - 1][0] && line[0][1] === line[line.length - 1][1];
     if (closed) {
       // an area: use its fall line, from the highest to the lowest corner
@@ -67,9 +76,16 @@ async function main() {
     const kind = e.tags?.["piste:type"] === "halfpipe" || /pipe/i.test(name ?? "") ? "pipe" : "park";
     parks.push({ name, kind, coords: line });
   }
-  for (const p of MOUNTAINS[slug]?.parks ?? []) parks.push({ name: p.name, kind: p.kind, coords: p.coords });
+  for (const p of MOUNTAINS[slug]?.parks ?? []) parks.push({ name: p.name, kind: p.kind, coords: p.coords, line: p.line });
+  for (const p of MOUNTAINS[slug]?.parkRuns ?? []) {
+    const run = data.runs.filter((r) => r.name === p.run).sort((a, b) => b.coords.length - a.coords.length)[0];
+    if (!run) throw new Error(`park run not found: ${p.run}`);
+    const coords = ele(run.coords[0]) >= ele(run.coords[run.coords.length - 1]) ? run.coords : [...run.coords].reverse();
+    parks.push({ name: p.name ?? p.run, kind: "park", coords, line: p.line });
+  }
 
   data.parks = parks;
+  data.hikes = hikes;
 
   // Landmarks: a run's midpoint (longest piece with that name), a named peak, or a fixed point.
   // Mountains without a hand-picked list get automatic ones (see autoLandmarks).
@@ -98,6 +114,7 @@ async function main() {
 
   writeFileSync(file, JSON.stringify(data));
   console.log(`${parks.length} park feature(s): ${parks.map((p) => `${p.name ?? "unnamed"} (${p.kind})`).join(", ") || "none"}`);
+  console.log(`${hikes.length} hike(s): ${hikes.map((h) => h.name ?? "unnamed").join(", ") || "none"}`);
   console.log(`${data.landmarks.length} landmark(s): ${data.landmarks.map((l) => l.name).join(", ") || "none"} → ${file}`);
 }
 
