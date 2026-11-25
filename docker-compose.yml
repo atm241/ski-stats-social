@@ -1,0 +1,21 @@
+# Local Postgres for development: `docker compose up -d`. Port 5434 so it stays clear of other local databases.
+name: gapr
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: gapr
+      POSTGRES_PASSWORD: gapr
+      POSTGRES_DB: gapr
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - gapr-db:/var/lib/postgresql/data
+      - ./prisma/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gapr"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  gapr-db:

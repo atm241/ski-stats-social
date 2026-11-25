@@ -8,13 +8,9 @@ import { DayExplorer, type RunSocial } from "@/components/DayExplorer";
 import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, normDifficulty, SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { dayDetail } from "@/lib/days";
 import { clockTime, duration, feet, miles, mph, prettyDate } from "@/lib/format";
-import { loadMountain, mountainSlugForResort } from "@/lib/mountain/registry";
-import { dayComments } from "@/lib/comments";
-import { skiedWith } from "@/lib/social";
+import { loadDay } from "@/lib/views";
 import { CommentForm } from "./CommentForm";
-import { labelSegments } from "@/lib/trails";
 
 const KIND_LABEL: Record<string, string> = { resort: "Resort", backcountry: "Backcountry", mixed: "Resort + uphill" };
 
@@ -28,21 +24,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function DayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [day, me] = await Promise.all([prisma.skiDay.findUnique({ where: { id }, include: { user: true } }), currentUser()]);
-  if (!day) notFound();
-
-  const { track, segments, flagReasons } = dayDetail(day);
-  const slug = await mountainSlugForResort(day.resortName);
-  const labels = slug ? labelSegments(track, segments, await loadMountain(slug)) : segments.map(() => null);
-  const [companions, comments, runRecords] = await Promise.all([
-    skiedWith(day),
-    dayComments(day.id),
-    prisma.run.findMany({ where: { dayId: day.id }, include: { likes: me ? { where: { userId: me.id }, select: { userId: true } } : false } }),
-  ]);
+  const view = await loadDay(id, await currentUser());
+  if (!view) notFound();
+  const { day, track, segments, flagReasons, slug, labels, companions, comments, isMine, canComment } = view;
   const runSocial: RunSocial = Object.fromEntries(
-    runRecords.map((r) => [r.index, { id: r.id, likes: r.likeCount, liked: !!r.likes?.length, canLike: !!me && me.id !== day.userId, board: `/mountains/${r.mountain}/runs/${encodeURIComponent(r.trail)}` }]),
+    [...view.runs].map(([i, r]) => [i, { id: r.id, likes: r.likes, liked: r.liked, canLike: r.canLike, board: `/mountains/${r.mountain}/runs/${encodeURIComponent(r.trail)}` }]),
   );
-  const isMine = me?.id === day.userId;
 
   const runs = segments.flatMap((s, i) => (s.kind === "run" ? [{ s, l: labels[i] }] : []));
   const avgRunSpeed = day.skiTimeS > 0 ? day.distanceM / day.skiTimeS : 0;
@@ -218,7 +205,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
                       {c.user.displayName}
                     </Link>
                     <span className="text-xs text-ink-faint">{c.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                    {me && (me.id === c.userId || me.id === day.userId) && (
+                    {c.canDelete && (
                       <form action={deleteCommentAction.bind(null, c.id, day.id)} className="ml-auto">
                         <button className="text-xs text-ink-faint hover:text-bad">Delete</button>
                       </form>
@@ -230,7 +217,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
             ))}
           </ul>
         )}
-        {me ? (
+        {canComment ? (
           <CommentForm dayId={day.id} />
         ) : (
           <p className="text-sm text-ink-soft">

@@ -1,15 +1,16 @@
 import "server-only";
-import type { SkiDay, User } from "@prisma/client";
+import type { User } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
 import type { ApiDaySummary, ApiUser } from "./apiTypes";
 import { userFromRequest } from "./auth";
+import type { Day } from "./dayRecord";
 import { mountainSlugForResort } from "./mountain/registry";
 
 /** Server helpers for the JSON API the mobile app uses. */
 
 export const apiUser = (u: Pick<User, "username" | "displayName" | "color">): ApiUser => ({ username: u.username, displayName: u.displayName, color: u.color });
 
-export async function apiDay(d: SkiDay & { user: User }): Promise<ApiDaySummary> {
+export async function apiDay(d: Day & { user: User }): Promise<ApiDaySummary> {
   return {
     id: d.id,
     user: apiUser(d.user),

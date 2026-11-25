@@ -1,4 +1,4 @@
-import type { SkiDay } from "@prisma/client";
+import type { Day } from "@/lib/days";
 import { duration } from "@/lib/format";
 
 /** Where the hours went: skiing, lifts, lift lines, uphill, car, breaks. */
@@ -11,7 +11,7 @@ const PARTS = [
   { key: "rest", label: "Breaks", color: "var(--color-line-strong)" },
 ] as const;
 
-export function DayBreakdown({ day }: { day: SkiDay }) {
+export function DayBreakdown({ day }: { day: Day }) {
   const totalS = Math.max(1, (day.endedAt.getTime() - day.startedAt.getTime()) / 1000);
   const seconds: Record<(typeof PARTS)[number]["key"], number> = {
     ski: day.skiTimeS,

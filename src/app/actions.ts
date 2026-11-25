@@ -21,7 +21,7 @@ export async function requestLink(_: LinkState, form: FormData): Promise<LinkSta
   const email = normalizeEmail(String(form.get("email") ?? ""));
   if (!email) return { error: "That doesn't look like an email address." };
   // per address is limited in requestLoginLink; this stops one sender mailing many addresses
-  if (!rateLimit(`login-ip:${clientIp(await headers())}`, 10, 15 * 60_000)) return { error: "Too many sign-in emails from here. Try again in a few minutes." };
+  if (!(await rateLimit(`login-ip:${clientIp(await headers())}`, 10, 15 * 60_000))) return { error: "Too many sign-in emails from here. Try again in a few minutes." };
   const r = await requestLoginLink(email);
   return r.ok ? { sentTo: email, devLink: r.devLink } : { error: r.error };
 }

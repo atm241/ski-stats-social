@@ -1,6 +1,8 @@
 import "server-only";
-import type { SkiDay, User } from "@prisma/client";
-import { dayDetail } from "./days";
+import type { User } from "@/generated/prisma/client";
+import type { StoredTrack } from "./analysis/process";
+import type { Segment } from "./analysis/types";
+import { type Day, dayDetail, WITH_TRACK } from "./dayRecord";
 import { prisma } from "./db";
 import { type Together, togetherness } from "./together";
 
@@ -28,24 +30,27 @@ export async function friendIds(userId: string): Promise<string[]> {
   return out.map((f) => f.followingId).filter((id) => back.has(id));
 }
 
-export type Companion = { user: User; day: SkiDay } & Together;
+export type Companion = { user: User; day: Day; track: StoredTrack; segments: Segment[] } & Together;
 
 /**
  * Friends who skied with you: their day at the same resort on the same date, with the lifts and runs
  * you shared (see together.ts). Only mutual follows are shown, so a stranger on the next chair is
  * never revealed on your day, and you never show up on theirs.
  */
-export async function skiedWith(day: SkiDay & { user: User }): Promise<Companion[]> {
+export async function skiedWith(day: Day, mine: { track: StoredTrack; segments: Segment[] }): Promise<Companion[]> {
   if (!day.resortName) return [];
   const friends = await friendIds(day.userId);
   if (!friends.length) return [];
   const others = await prisma.skiDay.findMany({
     where: { localDate: day.localDate, resortName: day.resortName, userId: { in: friends } },
     include: { user: true },
+    omit: WITH_TRACK,
   });
-  const mine = dayDetail(day);
   return others
-    .map((o) => ({ user: o.user, day: o as SkiDay, ...togetherness(mine, dayDetail(o).track) }))
+    .map(({ track: t, segments: s, user, ...day }) => {
+      const { track, segments } = dayDetail({ track: t, segments: s, flagReasons: null });
+      return { user, day, track, segments, ...togetherness(mine, track) };
+    })
     .filter((c) => c.lifts + c.runs > 0)
     .sort((a, b) => b.sharedS - a.sharedS);
 }

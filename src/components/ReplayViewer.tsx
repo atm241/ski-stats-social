@@ -11,6 +11,7 @@ import { Line2 } from "three/addons/lines/Line2.js";
 import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import type { StoredTrack } from "@/lib/analysis/process";
 import type { Segment } from "@/lib/analysis/types";
+import { mountainUrl } from "@/lib/mountain/source";
 import { buildMountainScene } from "@/lib/mountain/buildScene";
 import { createOccluderHider } from "@/lib/mountain/occlusion";
 import { createParkTricks, type TrickFrame } from "@/lib/mountain/park";
@@ -71,7 +72,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
     if (!el) return;
     let disposed = false;
     let cleanup = () => {};
-    fetch(`/mountains/${slug}.json`)
+    fetch(mountainUrl(slug))
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json() as Promise<MountainData>;

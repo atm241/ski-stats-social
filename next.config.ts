@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   headers: async () => [
     { source: "/:path*", headers: SECURITY_HEADERS },
+    // Mountain files change only when rebuilt: let browsers and CDNs reuse them for an hour.
+    { source: "/mountains/:file*.json", headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" }] },
     ...(process.env.NODE_ENV === "production" ? [] : [{ source: "/api/:path*", headers: DEV_API_CORS }]),
   ],
 };

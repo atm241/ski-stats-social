@@ -1,0 +1,385 @@
+[
+ {
+  "slug": "a-basin",
+  "name": "Arapahoe Basin",
+  "resorts": [
+   "Arapahoe Basin"
+  ]
+ },
+ {
+  "slug": "alyeska",
+  "name": "Alyeska",
+  "resorts": [
+   "Alyeska Resort"
+  ]
+ },
+ {
+  "slug": "aspen-highlands",
+  "name": "Aspen Highlands",
+  "resorts": [
+   "Aspen Highlands"
+  ]
+ },
+ {
+  "slug": "aspen-mountain",
+  "name": "Aspen Mountain",
+  "resorts": [
+   "Aspen Mountain"
+  ]
+ },
+ {
+  "slug": "beaver-creek",
+  "name": "Beaver Creek",
+  "resorts": [
+   "Beaver Creek"
+  ]
+ },
+ {
+  "slug": "big-bear",
+  "name": "Big Bear Mountain Resort",
+  "resorts": [
+   "Bear Mountain",
+   "Snow Summit"
+  ]
+ },
+ {
+  "slug": "big-sky",
+  "name": "Big Sky",
+  "resorts": [
+   "Big Sky Resort"
+  ]
+ },
+ {
+  "slug": "blue-mountain",
+  "name": "Blue Mountain",
+  "resorts": [
+   "Blue Mountain Ski Resort"
+  ]
+ },
+ {
+  "slug": "breckenridge",
+  "name": "Breckenridge",
+  "resorts": [
+   "Breckenridge"
+  ]
+ },
+ {
+  "slug": "brighton-solitude",
+  "name": "Brighton & Solitude",
+  "resorts": [
+   "Brighton Resort",
+   "Solitude Mountain Resort"
+  ]
+ },
+ {
+  "slug": "copper",
+  "name": "Copper Mountain",
+  "resorts": [
+   "Copper Mountain"
+  ]
+ },
+ {
+  "slug": "crested-butte",
+  "name": "Crested Butte",
+  "resorts": [
+   "Crested Butte Mountain Resort"
+  ]
+ },
+ {
+  "slug": "crystal-mountain",
+  "name": "Crystal Mountain",
+  "resorts": [
+   "Crystal Mountain"
+  ]
+ },
+ {
+  "slug": "deer-valley",
+  "name": "Deer Valley Resort",
+  "resorts": [
+   "Deer Valley Resort"
+  ]
+ },
+ {
+  "slug": "fernie",
+  "name": "Fernie",
+  "resorts": [
+   "Fernie Alpine Resort"
+  ]
+ },
+ {
+  "slug": "heavenly",
+  "name": "Heavenly",
+  "resorts": [
+   "Heavenly Mountain Resort"
+  ]
+ },
+ {
+  "slug": "jackson-hole",
+  "name": "Jackson Hole",
+  "resorts": [
+   "Jackson Hole Mountain Resort"
+  ]
+ },
+ {
+  "slug": "keystone",
+  "name": "Keystone",
+  "resorts": [
+   "Keystone"
+  ]
+ },
+ {
+  "slug": "kicking-horse",
+  "name": "Kicking Horse",
+  "resorts": [
+   "Kicking Horse Resort"
+  ]
+ },
+ {
+  "slug": "killington",
+  "name": "Killington",
+  "resorts": [
+   "Killington Resort"
+  ]
+ },
+ {
+  "slug": "kirkwood",
+  "name": "Kirkwood",
+  "resorts": [
+   "Kirkwood Mountain Resort"
+  ]
+ },
+ {
+  "slug": "lake-louise",
+  "name": "Lake Louise",
+  "resorts": [
+   "Lake Louise Ski Area"
+  ]
+ },
+ {
+  "slug": "loon",
+  "name": "Loon Mountain",
+  "resorts": [
+   "Loon Mountain Resort"
+  ]
+ },
+ {
+  "slug": "mammoth",
+  "name": "Mammoth Mountain",
+  "resorts": [
+   "Mammoth Mountain"
+  ]
+ },
+ {
+  "slug": "mount-snow",
+  "name": "Mount Snow",
+  "resorts": [
+   "Mount Snow"
+  ]
+ },
+ {
+  "slug": "mt-bachelor",
+  "name": "Mt. Bachelor",
+  "resorts": [
+   "Mt. Bachelor"
+  ]
+ },
+ {
+  "slug": "northstar",
+  "name": "Northstar",
+  "resorts": [
+   "Northstar at Tahoe Resort"
+  ]
+ },
+ {
+  "slug": "okemo",
+  "name": "Okemo",
+  "resorts": [
+   "Okemo Mountain"
+  ]
+ },
+ {
+  "slug": "palisades-tahoe",
+  "name": "Palisades Tahoe",
+  "resorts": [
+   "Palisades Tahoe Olympic Valley",
+   "Palisades Tahoe Alpine Meadows"
+  ]
+ },
+ {
+  "slug": "panorama",
+  "name": "Panorama",
+  "resorts": [
+   "Panorama Mountain Resort"
+  ]
+ },
+ {
+  "slug": "park-city",
+  "name": "Park City Mountain",
+  "resorts": [
+   "Park City Mountain Resort"
+  ]
+ },
+ {
+  "slug": "red-mountain",
+  "name": "RED Mountain",
+  "resorts": [
+   "Red Mountain Resort"
+  ]
+ },
+ {
+  "slug": "revelstoke",
+  "name": "Revelstoke",
+  "resorts": [
+   "Revelstoke Mountain Resort"
+  ]
+ },
+ {
+  "slug": "schweitzer",
+  "name": "Schweitzer",
+  "resorts": [
+   "Schweitzer Mountain Resort"
+  ]
+ },
+ {
+  "slug": "snowbasin",
+  "name": "Snowbasin",
+  "resorts": [
+   "Snowbasin Resort"
+  ]
+ },
+ {
+  "slug": "snowbird-alta",
+  "name": "Snowbird & Alta",
+  "resorts": [
+   "Snowbird",
+   "Alta Ski Area"
+  ]
+ },
+ {
+  "slug": "snowmass",
+  "name": "Snowmass",
+  "resorts": [
+   "Aspen Snowmass"
+  ]
+ },
+ {
+  "slug": "snowshoe",
+  "name": "Snowshoe",
+  "resorts": [
+   "Snowshoe Mountain"
+  ]
+ },
+ {
+  "slug": "steamboat",
+  "name": "Steamboat",
+  "resorts": [
+   "Steamboat Ski Resort"
+  ]
+ },
+ {
+  "slug": "stevens-pass",
+  "name": "Stevens Pass",
+  "resorts": [
+   "Stevens Pass"
+  ]
+ },
+ {
+  "slug": "stowe",
+  "name": "Stowe",
+  "resorts": [
+   "Stowe Mountain Resort"
+  ]
+ },
+ {
+  "slug": "stratton",
+  "name": "Stratton",
+  "resorts": [
+   "Stratton Mountain Resort"
+  ]
+ },
+ {
+  "slug": "sugarbush",
+  "name": "Sugarbush",
+  "resorts": [
+   "Sugarbush Resort"
+  ]
+ },
+ {
+  "slug": "sugarloaf",
+  "name": "Sugarloaf",
+  "resorts": [
+   "Sugarloaf"
+  ]
+ },
+ {
+  "slug": "sun-peaks",
+  "name": "Sun Peaks",
+  "resorts": [
+   "Sun Peaks Resort"
+  ]
+ },
+ {
+  "slug": "sun-valley",
+  "name": "Sun Valley",
+  "resorts": [
+   "Sun Valley - Bald Mountain",
+   "Sun Valley - Dollar Mountain"
+  ]
+ },
+ {
+  "slug": "sunday-river",
+  "name": "Sunday River",
+  "resorts": [
+   "Sunday River"
+  ]
+ },
+ {
+  "slug": "sunshine-village",
+  "name": "Banff Sunshine",
+  "resorts": [
+   "Banff Sunshine Village"
+  ]
+ },
+ {
+  "slug": "taos",
+  "name": "Taos Ski Valley",
+  "resorts": [
+   "Taos Ski Valley"
+  ]
+ },
+ {
+  "slug": "telluride",
+  "name": "Telluride",
+  "resorts": [
+   "Telluride Ski Area"
+  ]
+ },
+ {
+  "slug": "tremblant",
+  "name": "Tremblant",
+  "resorts": [
+   "Mont Tremblant Resort"
+  ]
+ },
+ {
+  "slug": "vail",
+  "name": "Vail",
+  "resorts": [
+   "Vail"
+  ]
+ },
+ {
+  "slug": "whistler-blackcomb",
+  "name": "Whistler Blackcomb",
+  "resorts": [
+   "Whistler Blackcomb"
+  ]
+ },
+ {
+  "slug": "winter-park",
+  "name": "Winter Park",
+  "resorts": [
+   "Winter Park Resort"
+  ]
+ }
+]

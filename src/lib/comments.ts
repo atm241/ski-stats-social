@@ -15,7 +15,7 @@ export async function addComment(userId: string, dayId: string, raw: string): Pr
   const body = raw.trim().replace(/\n{3,}/g, "\n\n");
   if (!body) return { ok: false, error: "Write something first." };
   if (body.length > MAX_COMMENT_CHARS) return { ok: false, error: `Keep it under ${MAX_COMMENT_CHARS} characters.` };
-  if (!rateLimit(`comment:${userId}`, 20, 10 * 60_000)) return { ok: false, error: "That's a lot of comments. Try again in a few minutes." };
+  if (!(await rateLimit(`comment:${userId}`, 20, 10 * 60_000))) return { ok: false, error: "That's a lot of comments. Try again in a few minutes." };
   if (!(await prisma.skiDay.findUnique({ where: { id: dayId }, select: { id: true } }))) return { ok: false, error: "That day is gone." };
   await prisma.comment.create({ data: { dayId, userId, body } });
   return { ok: true };

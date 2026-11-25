@@ -1,7 +1,7 @@
 import type { StoredTrack } from "./analysis/process";
 import type { Segment } from "./analysis/types";
 import type { MountainData } from "./mountain/types";
-import { indexFor, labelSegments } from "./trails";
+import { indexFor, labelSegments, type SegmentLabel } from "./trails";
 
 /** Splits a day into its named runs, and each run into the trails it went down (pure, for tests). */
 
@@ -20,9 +20,14 @@ export interface RunRow {
 
 const SPEED_SPAN = 2; // points either side for a speed estimate (smooths GPS jitter)
 
-/** The named runs of a day (unnamed runs and lifts are skipped). */
-export function runRows(track: StoredTrack, segments: Segment[], data: MountainData): RunRow[] {
-  const labels = labelSegments(track, segments, data);
+export interface LiftRow {
+  index: number;
+  lift: string;
+  startedAt: Date;
+}
+
+/** The named runs of a day (unnamed runs and lifts are skipped). Pass `labels` if you already have them. */
+export function runRows(track: StoredTrack, segments: Segment[], data: MountainData, labels: (SegmentLabel | null)[] = labelSegments(track, segments, data)): RunRow[] {
   const { terrain, names } = indexFor(data);
   const pts = track.pts.map(([dt, lat, lon]) => ({ t: track.t0 + dt * 1000, xz: terrain.toXZ(lon, lat) }));
   const speedAt = (i: number) => {
@@ -49,4 +54,9 @@ export function runRows(track: StoredTrack, segments: Segment[], data: MountainD
     const onTrails = [...per].map(([trail, v]) => ({ trail, maxSpeedMps: Math.min(v.max, s.maxSpeedMps), share: total ? v.n / total : 0 }));
     return [{ index: i, trail: l.name, trails: l.names, difficulty: l.difficulty, startedAt: new Date(s.startT), durationS: (s.endT - s.startT) / 1000, verticalM: s.verticalM, maxSpeedMps: s.maxSpeedMps, onTrails }];
   });
+}
+
+/** The named lift rides of a day. */
+export function liftRows(segments: Segment[], labels: (SegmentLabel | null)[]): LiftRow[] {
+  return segments.flatMap((s, i) => (s.kind === "lift" && labels[i] ? [{ index: i, lift: labels[i]!.name, startedAt: new Date(s.startT) }] : []));
 }

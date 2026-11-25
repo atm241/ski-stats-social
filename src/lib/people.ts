@@ -1,5 +1,5 @@
 import "server-only";
-import type { User } from "@prisma/client";
+import type { User } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { friendIds, followingIds } from "./social";
 import { newUploadToken } from "./tokens";
@@ -13,7 +13,7 @@ export async function searchPeople(q: string, me: User | null) {
   const term = q.trim().replace(/^@/, "").slice(0, 40);
   if (term.length < 2) return [];
   const users = await prisma.user.findMany({
-    where: { OR: [{ username: { contains: term.toLowerCase() } }, { displayName: { contains: term } }], ...(me ? { NOT: { id: me.id } } : {}) },
+    where: { OR: [{ username: { contains: term, mode: "insensitive" } }, { displayName: { contains: term, mode: "insensitive" } }], ...(me ? { NOT: { id: me.id } } : {}) },
     take: SEARCH_LIMIT * 2,
   });
   const friends = new Set(me ? await friendIds(me.id) : []);

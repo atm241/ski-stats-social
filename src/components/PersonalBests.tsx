@@ -1,10 +1,9 @@
-import type { SkiDay } from "@prisma/client";
 import { ArrowDownRight, Flame, Gauge, Hash, Mountain, Route, Ruler, TrendingUp, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { type BestKey, longestStreak, personalBests } from "@/lib/days";
+import { type BestKey, type Day, longestStreak, personalBests } from "@/lib/days";
 import { feet, miles, mph, prettyDate } from "@/lib/format";
 
-const BESTS: { key: BestKey; icon: LucideIcon; label: string; value: (d: SkiDay) => string; unit: string }[] = [
+const BESTS: { key: BestKey; icon: LucideIcon; label: string; value: (d: Day) => string; unit: string }[] = [
   { key: "verticalM", icon: ArrowDownRight, label: "Biggest day", value: (d) => feet(d.verticalM), unit: "ft" },
   { key: "maxSpeedMps", icon: Gauge, label: "Top speed", value: (d) => mph(d.maxSpeedMps), unit: "mph" },
   { key: "runCount", icon: Hash, label: "Most runs", value: (d) => String(d.runCount), unit: "runs" },
@@ -14,7 +13,7 @@ const BESTS: { key: BestKey; icon: LucideIcon; label: string; value: (d: SkiDay)
   { key: "uphillM", icon: TrendingUp, label: "Biggest uphill", value: (d) => feet(d.uphillM), unit: "ft" },
 ];
 
-export function PersonalBests({ days }: { days: SkiDay[] }) {
+export function PersonalBests({ days }: { days: Day[] }) {
   const bests = personalBests(days);
   const streak = longestStreak(days);
   return (

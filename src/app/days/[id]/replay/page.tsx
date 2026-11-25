@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ReplayViewer } from "@/components/ReplayViewer";
 import { prisma } from "@/lib/db";
-import { dayDetail } from "@/lib/days";
+import { dayDetail, WITH_TRACK } from "@/lib/days";
 import { feet, prettyDate } from "@/lib/format";
 import { mountainSlugForResort } from "@/lib/mountain/registry";
 import { skiedWith } from "@/lib/social";
@@ -19,12 +19,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ReplayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ embed?: string }> }) {
   const { id } = await params;
   const embed = (await searchParams).embed === "1";
-  const day = await prisma.skiDay.findUnique({ where: { id }, include: { user: true } });
+  const day = await prisma.skiDay.findUnique({ where: { id }, include: { user: true }, omit: WITH_TRACK });
   if (!day) notFound();
   const slug = await mountainSlugForResort(day.resortName);
   const { track, segments } = dayDetail(day);
   // friends who skied with them ride along in the replay
-  const companions = slug ? await skiedWith(day) : [];
+  const companions = slug ? await skiedWith(day, { track, segments }) : [];
   const title = `${day.user.displayName} · ${day.resortName} · ${prettyDate(day.localDate, { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
@@ -52,7 +52,7 @@ export default async function ReplayPage({ params, searchParams }: { params: Pro
           segments={segments}
           timeZone={day.timezone}
           rider={{ avatar: day.user.avatar, displayName: day.user.displayName }}
-          companions={companions.map((c) => ({ ...dayDetail(c.day), rider: { avatar: c.user.avatar, displayName: c.user.displayName } }))}
+          companions={companions.map((c) => ({ track: c.track, segments: c.segments, rider: { avatar: c.user.avatar, displayName: c.user.displayName } }))}
           title={title}
         />
       ) : (

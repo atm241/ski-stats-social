@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
@@ -50,3 +52,6 @@ next-env.d.ts
 ios/**/xcuserdata/
 ios/**/*.xcuserstate
 ios/**/DerivedData/
+
+# generated Prisma client (npm install runs prisma generate)
+/src/generated/

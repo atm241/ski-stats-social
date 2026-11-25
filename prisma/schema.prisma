@@ -1,12 +1,12 @@
-// SQLite for local development. To deploy, switch provider to "postgresql" and point
-// DATABASE_URL at a hosted Postgres (Neon, Supabase, RDS...).
+// Postgres everywhere (local: `docker compose up -d`). The connection URL lives in prisma.config.ts.
+// Schema changes go through migrations: `npm run db:migrate -- --name <change>`.
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
 }
 
 model User {
@@ -34,6 +34,7 @@ model User {
   apiTokens   ApiToken[]
   comments    Comment[]
   runs        Run[]
+  liftRides   LiftRide[]
   runLikes    RunLike[]
 }
 
@@ -146,10 +147,12 @@ model SkiDay {
   createdAt     DateTime @default(now())
   comments      Comment[]
   runs          Run[]
+  liftRides     LiftRide[]
 
   @@unique([userId, startedAt])
   @@index([seasonKey, flagged])
   @@index([userId, localDate])
+  @@index([resortName, localDate])
 }
 
 /// A comment on someone's ski day.
@@ -194,6 +197,7 @@ model Run {
   onTrails    RunTrail[]
 
   @@unique([dayId, index])
+  @@index([userId])
   @@index([mountain, trail])
   @@index([mountain, likeCount])
 }
@@ -224,4 +228,32 @@ model RunTrail {
 
   @@id([runId, trail])
   @@index([mountain, trail, maxSpeedMps])
+  @@index([userId, mountain])
+}
+
+/// A named lift ride, indexed with a day's runs so profile and mountain pages can count rides
+/// without re-reading GPS tracks.
+model LiftRide {
+  id        String   @id @default(cuid())
+  dayId     String
+  day       SkiDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// segment index within the day
+  index     Int
+  mountain  String
+  lift      String
+  startedAt DateTime
+  flagged   Boolean  @default(false)
+
+  @@unique([dayId, index])
+  @@index([userId])
+  @@index([mountain, lift])
+}
+
+/// Fixed-window request counters, shared by every server instance.
+model RateLimit {
+  key         String   @id
+  windowStart DateTime
+  count       Int
 }

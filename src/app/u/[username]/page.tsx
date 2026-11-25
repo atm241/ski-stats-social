@@ -11,11 +11,10 @@ import { SeasonChart } from "@/components/SeasonChart";
 import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { totals } from "@/lib/days";
 import { duration, feet, miles, mph } from "@/lib/format";
-import { currentSeasonKey, seasonLabel } from "@/lib/season";
-import { followCounts, isFollowing } from "@/lib/social";
-import { mountainCompletions, trailStats } from "@/lib/stats";
+import { seasonLabel } from "@/lib/season";
+import { trailStats } from "@/lib/stats";
+import { loadProfile } from "@/lib/views";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -26,21 +25,15 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
 export default async function ProfilePage({ params, searchParams }: { params: Promise<{ username: string }>; searchParams: Promise<{ season?: string }> }) {
   const { username } = await params;
   const sp = await searchParams;
-  const [user, me] = await Promise.all([prisma.user.findUnique({ where: { username }, include: { days: { orderBy: { localDate: "desc" } } } }), currentUser()]);
-  if (!user) notFound();
-
-  const seasons = [...new Set(user.days.map((d) => d.seasonKey))];
-  const season = sp.season && seasons.includes(sp.season) ? sp.season : (seasons[0] ?? currentSeasonKey());
-  const days = user.days.filter((d) => d.seasonKey === season);
-  const counted = days.filter((d) => !d.flagged);
-  const t = totals(counted);
-  const allTime = totals(user.days.filter((d) => !d.flagged));
+  const profile = await loadProfile(username, await currentUser(), sp.season);
+  if (!profile) notFound();
+  const { user, isMe, seasons, season, days, counted, totals: t, lifetime: allTime, following, completions } = profile;
+  const counts = { followers: profile.followers, following: profile.followingCount };
   const runs = counted.reduce((a, d) => a + d.runCount, 0);
   const lifts = counted.reduce((a, d) => a + d.liftCount, 0);
   const liftWait = counted.reduce((a, d) => a + d.liftWaitS, 0);
   const topSpeed = Math.max(0, ...counted.map((d) => d.maxSpeedMps));
-  const [counts, following, trails] = await Promise.all([followCounts(user.id), me && me.id !== user.id ? isFollowing(me.id, user.id) : false, trailStats(counted)]);
-  const completions = await mountainCompletions(user.days); // all seasons
+  const trails = await trailStats({ userId: user.id, seasonKey: season });
 
   const resorts = new Map<string, { name: string; days: number; verticalM: number }>();
   for (const d of counted) {
@@ -62,8 +55,8 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             @{user.username} · {feet(allTime.verticalM)} ft lifetime · {allTime.days} days · {counts.followers} followers · {counts.following} following
           </p>
         </div>
-        {me && me.id !== user.id && <FollowButton username={user.username} following={following} />}
-        {me?.id === user.id && (
+        {profile.canFollow && <FollowButton username={user.username} following={following} />}
+        {isMe && (
           <Link href="/upload" className="btn-primary">
             Upload days
           </Link>
@@ -143,7 +136,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             <SectionTitle>Most skied trails</SectionTitle>
             <ol className="space-y-2 text-sm">
               {trails.trails.slice(0, 8).map((r) => (
-                <li key={r.resort + r.name} className="flex items-center gap-2">
+                <li key={r.mountain + r.name} className="flex items-center gap-2">
                   <Difficulty level={r.difficulty} size={10} />
                   <span className="min-w-0 truncate">{r.name}</span>
                   <span className="num ml-auto shrink-0 text-ink-soft">×{r.runs}</span>
@@ -155,7 +148,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             <SectionTitle right={<span className="num">{lifts} rides · {duration(liftWait * 1000)} in line</span>}>Lifts</SectionTitle>
             <ol className="space-y-2 text-sm">
               {trails.lifts.slice(0, 8).map((l) => (
-                <li key={l.resort + l.name} className="flex items-center gap-2">
+                <li key={l.mountain + l.name} className="flex items-center gap-2">
                   <Armchair size={12} className="shrink-0 text-lift" aria-hidden />
                   <span className="min-w-0 truncate">{l.name}</span>
                   <span className="num ml-auto shrink-0 text-ink-soft">×{l.rides}</span>

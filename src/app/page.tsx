@@ -11,21 +11,14 @@ import { leaderboard, seasonsWithData, totals } from "@/lib/days";
 import { feet, mph } from "@/lib/format";
 import { listMountains } from "@/lib/mountain/registry";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
-import { followingIds } from "@/lib/social";
+import { feedDays } from "@/lib/views";
 
 export default async function Home() {
   const [me, seasons, mountains] = await Promise.all([currentUser(), seasonsWithData(), listMountains()]);
   const season = seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
-  const friends = me ? await followingIds(me.id) : [];
-  const feedUsers = me && friends.length ? [me.id, ...friends] : null;
-  const [board, feed, myDays] = await Promise.all([
+  const [board, { days: feed, everyone }, myDays] = await Promise.all([
     leaderboard(season, "vertical", "public"),
-    prisma.skiDay.findMany({
-      where: feedUsers ? { userId: { in: feedUsers } } : undefined,
-      orderBy: [{ localDate: "desc" }, { startedAt: "desc" }],
-      take: 12,
-      include: { user: true },
-    }),
+    feedDays(me, 12),
     me ? prisma.skiDay.findMany({ where: { userId: me.id, seasonKey: season, flagged: false } }) : Promise.resolve([]),
   ]);
   const t = totals(myDays);
@@ -83,14 +76,14 @@ export default async function Home() {
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section>
-          <SectionTitle right={feedUsers ? "You and people you follow" : "Everyone"}>Recent days</SectionTitle>
+          <SectionTitle right={everyone ? "Everyone" : "You and people you follow"}>Recent days</SectionTitle>
           <div className="card divide-y divide-line overflow-hidden">
             {feed.map((d) => (
               <DayCard key={d.id} day={d} user={d.user} />
             ))}
             {feed.length === 0 && <p className="p-6 text-center text-sm text-ink-soft">Nothing yet.</p>}
           </div>
-          {me && !friends.length && <p className="mt-3 text-xs text-ink-faint">Follow skiers from their profile to make this your friends feed.</p>}
+          {me && everyone && <p className="mt-3 text-xs text-ink-faint">Follow skiers from their profile to make this your friends feed.</p>}
         </section>
 
         <aside className="space-y-8">

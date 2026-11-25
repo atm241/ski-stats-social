@@ -1,4 +1,5 @@
-import type { SkiDay, User } from "@prisma/client";
+import type { User } from "@/generated/prisma/client";
+import type { Day } from "@/lib/days";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { feet, mph } from "@/lib/format";
@@ -7,7 +8,7 @@ import { Avatar } from "./Avatar";
 const KIND: Record<string, string> = { resort: "Resort", backcountry: "Backcountry", mixed: "Resort + uphill" };
 
 /** One ski day as a compact row: date block, where, and the headline numbers. */
-export function DayCard({ day, user }: { day: SkiDay; user?: User }) {
+export function DayCard({ day, user }: { day: Day; user?: User }) {
   const d = new Date(`${day.localDate}T12:00:00Z`);
   return (
     <Link href={`/days/${day.id}`} className="group flex items-center gap-4 px-4 py-3 transition-colors hover:bg-raised">

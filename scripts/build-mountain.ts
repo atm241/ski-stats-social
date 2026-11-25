@@ -11,6 +11,7 @@
  * Runs, lifts and peaks: © OpenStreetMap contributors (ODbL), via the Overpass API.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeMountainIndex } from "./mountains-index";
 import { join } from "node:path";
 import { pointInRing } from "../src/lib/analysis/geo";
 import { PNG } from "pngjs";
@@ -151,6 +152,7 @@ async function main() {
   const out = join("public", "mountains", `${slug}.json`);
   mkdirSync(join("public", "mountains"), { recursive: true });
   writeFileSync(out, JSON.stringify(data));
+  writeMountainIndex();
   console.log(`${cols}×${rows} grid (${Math.round(widthM)}×${Math.round(depthM)} m), ${data.runs.length} runs, ${data.lifts.length} lifts, ${data.peaks.length} peaks → ${out}`);
   console.log(`next: npx tsx scripts/build-forest.ts ${slug} && npx tsx scripts/build-cliffs.ts ${slug}   (or use build-all.ts)`);
 }

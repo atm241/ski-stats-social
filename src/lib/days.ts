@@ -1,10 +1,12 @@
-import type { SkiDay, User } from "@prisma/client";
-import type { ProcessedDay, StoredTrack } from "./analysis/process";
-import type { Segment } from "./analysis/types";
+import type { User } from "@/generated/prisma/client";
+import type { ProcessedDay } from "./analysis/process";
 import { prisma } from "./db";
+import type { Day } from "./dayRecord";
 import { indexRuns } from "./runs";
 
-export type SaveOutcome = { status: "saved"; day: SkiDay } | { status: "duplicate"; localDate: string };
+export { type Day, dayDetail, WITH_TRACK } from "./dayRecord";
+
+export type SaveOutcome = { status: "saved"; day: Day } | { status: "duplicate"; localDate: string };
 
 export async function saveDay(userId: string, d: ProcessedDay, source: string, fileName?: string): Promise<SaveOutcome> {
   const startedAt = new Date(d.stats.startedAt);
@@ -48,16 +50,8 @@ export async function saveDay(userId: string, d: ProcessedDay, source: string, f
       segments: JSON.stringify(d.stats.segments),
     },
   });
-  await indexRuns(day); // name its runs now so trail leaderboards are plain queries
+  await indexRuns(day, d.track, d.stats.segments); // name its runs now so boards and stats are plain queries
   return { status: "saved", day };
-}
-
-export function dayDetail(day: SkiDay) {
-  return {
-    track: JSON.parse(day.track) as StoredTrack,
-    segments: JSON.parse(day.segments) as Segment[],
-    flagReasons: day.flagReasons ? (JSON.parse(day.flagReasons) as string[]) : [],
-  };
 }
 
 export interface SeasonTotals {
@@ -72,7 +66,7 @@ export interface SeasonTotals {
   skiTimeS: number;
 }
 
-type DayLike = Pick<SkiDay, "verticalM" | "uphillM" | "localDate" | "resortId" | "kind" | "distanceM" | "skiTimeS">;
+type DayLike = Pick<Day, "verticalM" | "uphillM" | "localDate" | "resortId" | "kind" | "distanceM" | "skiTimeS">;
 
 /** Days are counted by distinct calendar date; resorts only count lift-served days. */
 export function totals(days: DayLike[]): SeasonTotals {
@@ -93,17 +87,17 @@ export function totals(days: DayLike[]): SeasonTotals {
 export type BestKey = "verticalM" | "runCount" | "maxSpeedMps" | "longestRunM" | "tallestRunM" | "peakEleM" | "uphillM";
 
 /** The day holding each personal record (null if no day has a non-zero value). */
-export function personalBests(days: SkiDay[]): Record<BestKey, SkiDay | null> {
+export function personalBests<D extends Day>(days: D[]): Record<BestKey, D | null> {
   const keys: BestKey[] = ["verticalM", "runCount", "maxSpeedMps", "longestRunM", "tallestRunM", "peakEleM", "uphillM"];
-  const out = {} as Record<BestKey, SkiDay | null>;
+  const out = {} as Record<BestKey, D | null>;
   for (const k of keys) {
-    out[k] = days.reduce<SkiDay | null>((best, d) => (d[k] > 0 && (!best || d[k] > best[k]) ? d : best), null);
+    out[k] = days.reduce<D | null>((best, d) => (d[k] > 0 && (!best || d[k] > best[k]) ? d : best), null);
   }
   return out;
 }
 
 /** Longest run of consecutive calendar days skied. */
-export function longestStreak(days: Pick<SkiDay, "localDate">[]): { length: number; from?: string; to?: string } {
+export function longestStreak(days: Pick<Day, "localDate">[]): { length: number; from?: string; to?: string } {
   const dates = [...new Set(days.map((d) => d.localDate))].sort();
   let best = { length: 0, from: undefined as string | undefined, to: undefined as string | undefined };
   let start = 0;

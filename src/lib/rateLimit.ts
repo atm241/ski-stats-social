@@ -1,19 +1,21 @@
-/**
- * Sliding-window rate limiter kept in memory. Enough for one server process; when the app runs on
- * several instances, move the buckets to Redis/Upstash so the limit is shared.
- */
-const buckets = new Map<string, number[]>();
-const MAX_KEYS = 50_000;
+import "server-only";
+import { prisma } from "./db";
 
-/** Records a hit for `key` and says whether it's within `limit` hits per `windowMs`. */
-export function rateLimit(key: string, limit: number, windowMs: number, now = Date.now()): boolean {
-  const hits = (buckets.get(key) ?? []).filter((t) => now - t < windowMs);
-  const allowed = hits.length < limit;
-  if (allowed) hits.push(now);
-  buckets.delete(key); // re-insert so the Map's order is least-recently-used first
-  buckets.set(key, hits);
-  if (buckets.size > MAX_KEYS) buckets.delete(buckets.keys().next().value!);
-  return allowed;
+/**
+ * Fixed-window rate limiter in Postgres, so the limit holds across every server instance. One
+ * atomic upsert per hit: the window starts at the first hit and resets once it's `windowMs` old.
+ */
+export async function rateLimit(key: string, limit: number, windowMs: number, now = new Date()): Promise<boolean> {
+  const expired = new Date(now.getTime() - windowMs);
+  const [row] = await prisma.$queryRaw<{ count: number }[]>`
+    INSERT INTO "RateLimit" ("key", "windowStart", "count") VALUES (${key}, ${now}, 1)
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE WHEN "RateLimit"."windowStart" <= ${expired} THEN 1 ELSE "RateLimit"."count" + 1 END,
+      "windowStart" = CASE WHEN "RateLimit"."windowStart" <= ${expired} THEN ${now} ELSE "RateLimit"."windowStart" END
+    RETURNING "count"`;
+  // now and then, drop counters nobody has hit in a day
+  if (Math.random() < 0.01) await prisma.rateLimit.deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 86_400_000) } } });
+  return row.count <= limit;
 }
 
 /** Best-effort client IP behind a proxy (Vercel, Fly, nginx all set x-forwarded-for). */

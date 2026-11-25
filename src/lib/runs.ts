@@ -1,22 +1,29 @@
 import "server-only";
-import type { SkiDay } from "@prisma/client";
 import type { StoredTrack } from "./analysis/process";
 import type { Segment } from "./analysis/types";
 import { prisma } from "./db";
+import { type Day, dayDetail, WITH_TRACK } from "./dayRecord";
 import { loadMountain, mountainSlugForResort } from "./mountain/registry";
 import type { MountainData } from "./mountain/types";
-import { runRows } from "./runRows";
+import { liftRows, runRows } from "./runRows";
+import { labelSegments } from "./trails";
 
 /**
  * Per-run records for trail leaderboards: fastest down a trail (best top speed per skier) and the
  * most-liked runs down it. Runs are labelled once when a day is saved.
  */
 
-/** (Re)builds a saved day's runs. Safe to run twice: existing likes on a run survive a rebuild. */
-export async function indexRuns(day: SkiDay) {
+/**
+ * (Re)builds a saved day's runs and lift rides. Safe to run twice: existing likes on a run survive a
+ * rebuild. Rebuild after a mountain's trail map changes (`npm run runs:reindex`).
+ */
+export async function indexRuns(day: Day, track: StoredTrack, segments: Segment[]) {
   const slug = await mountainSlugForResort(day.resortName);
   if (!slug) return 0;
-  const rows = runRows(JSON.parse(day.track) as StoredTrack, JSON.parse(day.segments) as Segment[], await loadMountain(slug));
+  const data = await loadMountain(slug);
+  const labels = labelSegments(track, segments, data);
+  const rows = runRows(track, segments, data, labels);
+  const lifts = liftRows(segments, labels);
   await prisma.$transaction(async (tx) => {
     await tx.run.deleteMany({ where: { dayId: day.id, index: { notIn: rows.map((r) => r.index) } } });
     for (const r of rows) {
@@ -25,8 +32,23 @@ export async function indexRuns(day: SkiDay) {
       await tx.runTrail.deleteMany({ where: { runId: run.id } });
       await tx.runTrail.createMany({ data: r.onTrails.map((o) => ({ runId: run.id, mountain: slug, trail: o.trail, maxSpeedMps: o.maxSpeedMps, share: o.share, userId: day.userId, flagged: day.flagged })) });
     }
+    await tx.liftRide.deleteMany({ where: { dayId: day.id } });
+    await tx.liftRide.createMany({ data: lifts.map((l) => ({ dayId: day.id, userId: day.userId, index: l.index, mountain: slug, lift: l.lift, startedAt: l.startedAt, flagged: day.flagged })) });
   });
   return rows.length;
+}
+
+/** Re-labels saved days (all of them, or those at one mountain) after trail maps are rebuilt. */
+export async function reindexDays(mountain?: string) {
+  const resorts = mountain ? ((await loadMountain(mountain)).resorts ?? [(await loadMountain(mountain)).name]) : undefined;
+  const ids = await prisma.skiDay.findMany({ where: resorts ? { resortName: { in: resorts } } : { resortName: { not: null } }, select: { id: true } });
+  let runs = 0;
+  for (const { id } of ids) {
+    const day = await prisma.skiDay.findUniqueOrThrow({ where: { id }, omit: WITH_TRACK });
+    const { track, segments } = dayDetail(day);
+    runs += await indexRuns(day, track, segments);
+  }
+  return { days: ids.length, runs };
 }
 
 /** Like or unlike a run; returns the new state and count. You can't like your own run. */

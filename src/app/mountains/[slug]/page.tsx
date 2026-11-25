@@ -45,18 +45,18 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
   const byUser = new Map<string, { user: (typeof days)[number]["user"]; days: typeof days }>();
   for (const d of seasonDays) byUser.set(d.userId, { user: d.user, days: [...(byUser.get(d.userId)?.days ?? []), d] });
   const board = [...byUser.values()].map((u) => ({ user: u.user, ...totals(u.days) })).sort((a, b) => b.verticalM - a.verticalM);
-  const trails = seasonDays.length ? await trailStats(seasonDays) : null;
+  const trails = season ? await trailStats({ mountain: slug, seasonKey: season }) : null;
   const boards = await busiestTrails(slug, 12);
 
   // "Ski every run": your progress here (all seasons), and your friends' for comparison
   const me = await currentUser();
   const crew = me ? [me.id, ...(await friendIds(me.id))] : [];
+  const crewUsers = new Map(days.filter((d) => crew.includes(d.userId)).map((d) => [d.userId, d.user]));
   const progress = (
     await Promise.all(
-      crew.map(async (id) => {
-        const mine = days.filter((d) => d.userId === id);
-        const c = mine.length ? (await mountainCompletions(mine))[0] : undefined;
-        return c ? { user: mine[0].user, c } : null;
+      [...crewUsers].map(async ([id, user]) => {
+        const c = (await mountainCompletions(id, slug))[0];
+        return c ? { user, c } : null;
       }),
     )
   ).filter((x) => x !== null);

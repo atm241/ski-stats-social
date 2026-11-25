@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
   const size = Number(req.headers.get("content-length") ?? 0);
   if (size > MAX_REQUEST_BYTES) return NextResponse.json({ error: "That upload is too big. Send at most 100 MB at a time." }, { status: 413 });
-  if (!rateLimit(`upload:${user.id}`, 60, 10 * 60_000)) return NextResponse.json({ error: "Too many uploads at once. Try again in a few minutes." }, { status: 429 });
+  if (!(await rateLimit(`upload:${user.id}`, 60, 10 * 60_000))) return NextResponse.json({ error: "Too many uploads at once. Try again in a few minutes." }, { status: 429 });
 
   const form = await req.formData();
   const files = form.getAll("files").filter((f): f is File => f instanceof File);

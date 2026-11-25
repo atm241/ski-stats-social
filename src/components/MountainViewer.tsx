@@ -4,6 +4,7 @@ import { Check, Mountain, MapPin, Pause, RotateCw, Route, Sparkles, Triangle, ty
 import { useEffect, useRef, useState } from "react";
 import { Difficulty } from "./ui";
 import * as THREE from "three";
+import { mountainUrl } from "@/lib/mountain/source";
 import { buildMountainScene, DIFFICULTY } from "@/lib/mountain/buildScene";
 import { createStage } from "@/lib/mountain/stage";
 import type { MountainData } from "@/lib/mountain/types";
@@ -49,7 +50,7 @@ export function MountainViewer({ slug, skiedRuns }: { slug: string; skiedRuns?: 
     let disposed = false;
     let cleanup = () => {};
 
-    fetch(`/mountains/${slug}.json`)
+    fetch(mountainUrl(slug))
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.json() as Promise<MountainData>;

@@ -1,60 +1,88 @@
 # Gapr
 
-A ski social app and global leaderboard: vertical feet, days skied and unique resorts, resort and backcountry.
+A ski social app and global leaderboard: vertical feet, days skied and unique resorts, resort and backcountry. Named runs on 3D mountains, day replays, friends, comments, run likes and per-trail leaderboards. A web app (Next.js) and a phone app (Expo, in `mobile/`) share one API.
 
 ## Run it
 
+Needs Node 24 (`nvm use`) and Docker.
+
 ```bash
-npm install
+npm install            # also generates the Prisma client
 cp .env.example .env
-npm run db:push      # create the SQLite database
-npm run db:seed      # demo skiers with synthetic days
-npm run dev          # http://localhost:3000
+npm run db:up          # Postgres in Docker on port 5434 (plus a gapr_test database for tests)
+npm run db:deploy      # apply migrations
+npm run db:seed        # demo skiers with synthetic days, follows, comments and likes
+npm run dev -- -p 3100 # http://localhost:3100
 ```
 
-`npm test` runs the analysis tests. `samples/` has GPX files you can try in the uploader
-(`npx tsx scripts/make-samples.ts` regenerates them).
+In development, `/login` has one-click sign-in buttons for the demo skiers.
+
+| Command | What it does |
+|---|---|
+| `npm run check` | lint, typecheck, unit + database tests, production build (what CI runs first) |
+| `npm test` | Vitest: `unit` (pure logic) and `db` (`*.db.test.ts`, against `gapr_test`) |
+| `npm run e2e` | Playwright browser tests against the dev server and seeded data (uses your installed Chrome) |
+| `npm run db:migrate -- --name <change>` | after editing `prisma/schema.prisma`: write and apply a migration |
+| `npm run db:reset` | wipe the dev database, re-apply migrations, reseed |
+| `npm run runs:reindex [-- <slug>]` | re-label saved days after rebuilding a mountain (see "Run index") |
+| `npm run mountains:index` | rewrite `public/mountains/index.json` |
+
+`samples/` has GPX files to try in the uploader (`npx tsx scripts/make-samples.ts` regenerates them).
+
+## Layout
+
+- `src/app`: pages, server actions (`actions.ts`) and the JSON API (`api/`).
+- `src/lib`: everything else. Pure logic (analysis, trails, completion, togetherness, 3D scene) is unit tested; server modules (`server-only`) talk to the database.
+- `src/lib/views.ts`: what the day, profile and feed screens show. **Web pages and API routes both read from here**, so the web and phone apps can't drift apart; each only decides presentation.
+- `src/lib/apiTypes.ts`: the API's response types, imported by the phone app as `@shared/apiTypes`.
+- `mobile/`: the Expo app (see its own instructions in `mobile/AGENTS.md`).
+- `scripts/`: mountain builders and one-off maintenance.
+- `e2e/`: Playwright tests.
 
 ## How it works
 
-- **Data in:** GPX upload (`/upload` → `POST /api/uploads`). Every tracker can export GPX (Slopes, Garmin, Strava, Apple Watch via HealthFit). Neither Epic nor Ikon offers a public API.
+- **Data in:** GPX upload (`/upload` → `POST /api/uploads`), email-to-upload, the Apple Health export, or the iPhone sync app. Every tracker can export GPX. Neither Epic nor Ikon offers a public API.
 - **We measure, not the source app:** `src/lib/analysis/analyze.ts` smooths altitude, splits the day into up/down legs and classifies lifts, runs, skinning and driving. Vertical = total descent on runs. The same rules apply to everyone, which keeps the leaderboard fair.
-- **Resort detection:** `data/resorts.json` (~4,900 operating downhill areas, built from OpenSkiMap by `scripts/build-resorts.ts`), point-in-polygon with majority vote.
-- **Cheat guards:** car rides are excluded, and impossible speeds, lift rates or daily vertical flag a day off the leaderboard. Overlapping uploads are rejected as duplicates.
-- **Derived stats** (ski/lift/lift-line time, longest & tallest run, peak altitude) come from stored segments in `src/lib/analysis/extras.ts`. After changing that logic, run `npx tsx scripts/backfill-day-stats.ts` to recompute existing days.
+- **Resort detection:** `data/resorts.json` (~4,900 operating downhill areas from OpenSkiMap, built by `scripts/build-resorts.ts`), point-in-polygon with majority vote.
+- **Cheat guards:** car rides are excluded; impossible speeds, lift rates or daily vertical flag a day off the leaderboards. Overlapping uploads are rejected as duplicates.
 - **Seasons:** July–June, keyed `2025-26`; southern-hemisphere June days roll forward (`src/lib/season.ts`).
 
-## Stats (Slopes-style) and friends
+### Run index
 
-- **Named runs and lifts:** at resorts with a 3D mountain, every run and lift ride is matched to the trail map. `src/lib/trails.ts` has each GPS point vote for the nearest named trail or lift within 60 m. A run gets its main trail, the chain of trails skied in order, and a difficulty. Labels are computed on the fly, so rebuilding a mountain updates old days.
-- **Day page** (`/days/<id>`), centred on `src/components/DayExplorer.tsx`: an altitude/speed profile, a map, and a timeline of lift rides (with line waits), runs (trails, difficulty, vertical, distance, time, avg/top speed) and breaks. Selecting a run anywhere highlights it everywhere and zooms the map. The page also shows where the time went, the terrain mix by difficulty, the most-skied trails and lifts, and **Skied with**: other people's days at the same resort and date with a lift ride starting within 2 minutes and 120 m of yours (`src/lib/social.ts`).
-- **Season stats** (`/u/<username>`): totals, a vertical-by-day chart with monthly totals, personal bests, terrain mix, most-skied trails, lifts and time in lift lines (`src/lib/stats.ts`), plus resorts.
-- **Friends:** one-way follows (`Follow` model). The home feed and the leaderboard's Friends tab show you plus people you follow.
-- **Look:** a dark, data-first theme (`src/app/globals.css`) with Geist and Geist Mono, lucide icons and monogram avatars. `User.avatar` still stores the old emoji but isn't shown.
+When a day is saved, `indexRuns` (`src/lib/runs.ts`) matches it to the trail map once and stores the result: a `Run` per named run, a `RunTrail` per trail along it (with the top speed while on that trail), and a `LiftRide` per named lift ride. Profile and mountain stats, "ski every run" completion, trail leaderboards and likes all read these tables, so no page parses GPS tracks except the day page and the replay. Rebuilding a mountain changes trail names and shapes, so run `npm run runs:reindex -- <slug>` afterwards (likes survive).
 
-## 3D mountains and day replays
+GPS tracks are the big columns, and the Prisma client never loads them unless a query asks (`omit: WITH_TRACK`, see `src/lib/db.ts`).
 
-- `npx tsx scripts/build-all.ts <slug> [--debug <dir>]` builds a mountain listed in `scripts/mountains.config.ts` (built so far: `deer-valley`, `snowbird-alta`, `park-city`, `a-basin`). Each entry names the resorts it combines, its landmarks, and any hand-placed park features. The steps can also run on their own:
-  - `build-mountain.ts`: terrain height grid (AWS Terrain Tiles) plus runs, lifts and peaks from OpenStreetMap. Features inside a neighbouring resort's outline are dropped.
-  - `build-forest.ts`: where trees are and what kind. Tree cover comes from ESA WorldCover (10 m). Evergreen vs. leafless is decided by recent summer vs. late-fall Sentinel-2 greenness (NDVI). Among leafless trees, aspen vs. scrub oak/maple is decided by Meta/WRI's 1 m canopy height map. Recent summers also drop trees cleared for runs since 2021. Not ground-truthed; checked against peak-fall-colour satellite photos.
-  - `build-cliffs.ts`: exposed rock from USGS 3DEP lidar (US only), sampled at 2 m. A pixel counts as rock when it is steep both locally (≥ 42°) and over a 12 m baseline (≥ 37°); road cuts and foundations near OSM roads and buildings are ignored. Rock is grouped into 8 m cells with elevation, facing, steepness and face height. The scene draws an outcrop on each cell and greys the snow around it.
-  - `build-parks.ts`: terrain parks and halfpipes from OSM (`piste:type=snow_park`, or runs described as terrain parks) plus config entries, and resolves landmarks. Quick to re-run after editing the config.
-- Park City's new superpipe isn't in OSM yet. It is placed on the earthwork that appears in Aug–Sep 2026 Sentinel-2 imagery, beside 3 Kings / Pick'n Shovel above the base. Move it in the config once OSM maps it.
-- Overpass (OSM) is often at capacity; `scripts/lib/overpass.ts` retries with backoff across mirrors.
-- The viewer opens looking from the side the runs face, and has fly-to buttons for each landmark (cliffs, parks, peaks). Cliff outcrops skip mapped runs, so chutes stay snow, and thin out on 42–50° faces that hold snow in winter.
-- `/mountains/<slug>` is the low-poly explorer (`src/lib/mountain/buildScene.ts`, `stage.ts`); `/days/<id>/replay` animates a day on it (`replay.ts` timeline, `skier.ts`, `ReplayViewer.tsx`), including in-browser video recording.
-- `src/lib/sample/mountainDay.ts` generates synthetic days on a real lift/run network; the seed gives demo skier "Dana" days at Deer Valley, Snowbird/Alta and Park City, and "Alex" rides along on two of her Snowbird/Alta days to demo "Skied with".
+### Social
 
-## Accounts and getting data in
+- **Friends** are mutual follows. Invite links (`/invite/<code>`) make two people friends in one tap; `/people` has search and suggestions.
+- **Skied with** (`src/lib/together.ts`): a friend's day at the same resort and date counts when you rode lifts together (within 40 m for most of the ride) or skied runs together (within 90 m for most of the run). Friends only; strangers on the next chair never show up.
+- **Leaderboards:** the public board is opt-in (Settings); the friends board shows you and your friends. Trail boards (`/mountains/<slug>/runs/<trail>`) rank the fastest skiers on that trail and the most-liked runs down it.
+- **Comments and likes:** anyone signed in can comment on a day (rate-limited) and like other people's runs.
 
-- **Sign-in:** email magic link (`src/lib/magicLink.ts`). Links are single-use, expire in 15 minutes, and are redeemed by a button POST so email scanners can't burn them. Sessions are database-backed; only token hashes are stored. Without `RESEND_API_KEY`, emails print to the server console and the login page shows the link (dev only). Demo skiers can be signed into from `/login` in dev.
-- **Email-to-upload:** each account gets `<token>@INBOUND_DOMAIN` (shown in `/settings`). Inbound mail arrives via Postmark's webhook at `/api/inbound/postmark`, GPX attachments go through the same `ingestFile` pipeline as web uploads, every file is logged in `Upload`, and a receipt goes to the account's own email. Try it locally: `npx tsx --env-file=.env scripts/send-test-email.ts <your-upload-address>`.
-- **Apple Watch / iPhone (no Strava):** two routes. (1) *Apple Health export*: on `/upload`, pick the `export.zip` from Health → Export All Health Data. It's read in the browser (`src/lib/healthExport.ts`, streamed with fflate); only skiing/snowboarding workout routes are extracted and uploaded. (2) *iPhone sync app* (`ios/PowPalsSync`): reads ski workouts and routes from HealthKit and uploads new ones automatically using a personal token from Settings → iPhone sync (`ApiToken`, `Authorization: Bearer pp_…`, only hashes stored). Apple routes carry GPS Doppler speed and accuracy; the parser drops fixes with hAcc > 50 m and top speed uses device speed (median of 3) when present.
-- **Not supported (by design, for now):** Strava (its API terms only allow showing data to its owner, not leaderboards), Slopes (no API), Garmin (developer program paused). Apple Health / Health Connect need a native app.
+### 3D mountains and replays
+
+- `npx tsx scripts/build-all.ts <slug>` builds a mountain listed in `scripts/mountains.config.ts` (54 so far, including the large Epic and Ikon resorts). The steps can also run on their own:
+  - `build-mountain.ts`: terrain height grid (AWS Terrain Tiles) plus runs, lifts and peaks from OpenStreetMap. Resorts mapped as a point only get a padded box around it.
+  - `build-forest.ts`: tree cover from ESA WorldCover (10 m); evergreen vs. leafless from summer vs. late-fall Sentinel-2 greenness; aspen vs. scrub from Meta/WRI's 1 m canopy height.
+  - `build-cliffs.ts`: exposed rock from USGS 3DEP lidar (2 m) in the US; elsewhere, or where lidar covers under half the area, the coarser AWS Terrarium DEM.
+  - `build-parks.ts`: terrain parks and halfpipes from OSM and the config, and landmark positions.
+- The scene: `src/lib/mountain/buildScene.ts` assembles it from `props.ts` (low-poly trees, outcrops, park features), `views.ts` (camera views, named lines) and the terrain. `stage.ts` renders it. Named lines (Corbet's, Chimney, McConkey's…) are labelled when the camera is close.
+- `/days/<id>/replay` animates a day on the mountain, with friends who skied with you riding along.
+- **Hosting the files:** they're served from `public/mountains` (gzipped by Next, cached for an hour). In production, set `NEXT_PUBLIC_MOUNTAINS_URL` to a CDN or bucket holding the same files; the browser and the server then both read from there (`src/lib/mountain/source.ts`, `registry.ts`).
+
+## Accounts
+
+- **Sign-in:** email magic link (`src/lib/magicLink.ts`). Single-use, 15-minute links, redeemed by a button POST so email scanners can't burn them. Database-backed sessions; only token hashes are stored. Without `RESEND_API_KEY`, emails print to the server console.
+- **Phone app:** signs in with the same email link, which hands it an API token (`gapr://auth?token=pp_…`). The API accepts `Authorization: Bearer pp_…` or the session cookie.
+- **Email-to-upload:** each account gets `<token>@INBOUND_DOMAIN` (in Settings). Postmark's inbound webhook hits `/api/inbound/postmark`; attachments go through the same pipeline as uploads.
+- **Apple Watch / iPhone:** the Health export on `/upload` (read in the browser), or the Swift sync app in `ios/PowPalsSync`, which uploads new ski workouts with a personal token.
+- **Account deletion** (Settings, or `DELETE /api/me`) removes everything, including likes and comments on other people's days.
+- **Rate limits** (sign-in emails, uploads, comments) are kept in Postgres, so they hold across server instances.
 
 ## Before deploying
 
+- A hosted Postgres; set `DATABASE_URL` and run `npm run db:deploy` on each release.
 - Set `APP_URL`, `RESEND_API_KEY` + `EMAIL_FROM` (verified sending domain), and `INBOUND_WEBHOOK_SECRET`.
-- Inbound email: point an MX record for `INBOUND_DOMAIN` (e.g. `upload.yourdomain.com`) at Postmark inbound, and set the Postmark webhook to `https://inbound:<secret>@yourdomain.com/api/inbound/postmark`.
-- Switch Prisma to Postgres (`prisma/schema.prisma` provider + `DATABASE_URL`).
-- Leaderboard aggregates in memory (`src/lib/days.ts`); move it to SQL or a per-season totals table as users grow.
+- Upload `public/mountains` to a CDN or bucket and set `NEXT_PUBLIC_MOUNTAINS_URL`.
+- Inbound email: an MX record for `INBOUND_DOMAIN` pointing at Postmark inbound, and the Postmark webhook at `https://inbound:<secret>@yourdomain.com/api/inbound/postmark`.
