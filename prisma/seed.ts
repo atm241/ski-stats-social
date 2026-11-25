@@ -206,7 +206,44 @@ async function main() {
   const follow = (a: string, b: string) => prisma.follow.create({ data: { followerId: ids.get(a)!, followingId: ids.get(b)! } });
   for (const [a, b] of FRIENDS) await Promise.all([follow(a, b), follow(b, a)]);
   await follow("rosie", "dana");
+
+  // Friends comment on each other's days and like each other's runs; steep named lines get the most love.
+  const social = rng(77);
+  const friendsOf = (u: string) => FRIENDS.flatMap(([a, b]) => (a === u ? [b] : b === u ? [a] : []));
+  const days = await prisma.skiDay.findMany({ where: { user: { email: null } }, include: { user: true, runs: true } });
+  let comments = 0;
+  let likes = 0;
+  for (const day of days) {
+    const crew = friendsOf(day.user.username);
+    if (!crew.length) continue;
+    for (const who of crew) {
+      if (social() < 0.35) {
+        await prisma.comment.create({ data: { dayId: day.id, userId: ids.get(who)!, body: COMMENTS[Math.floor(social() * COMMENTS.length)], createdAt: new Date(day.endedAt.getTime() + (1 + social() * 20) * 3600_000) } });
+        comments++;
+      }
+      for (const run of day.runs) {
+        const steep = run.difficulty === "expert" || run.difficulty === "extreme" || run.difficulty === "freeride" ? 0.55 : run.difficulty === "advanced" ? 0.2 : 0.05;
+        if (social() < steep) {
+          await prisma.runLike.create({ data: { userId: ids.get(who)!, runId: run.id } });
+          await prisma.run.update({ where: { id: run.id }, data: { likeCount: { increment: 1 } } });
+          likes++;
+        }
+      }
+    }
+  }
+  console.log(`social: ${comments} comments, ${likes} run likes`);
 }
+
+const COMMENTS = [
+  "Send it!",
+  "That last lap was the move.",
+  "Jealous. Work was brutal today.",
+  "How was the snow up top?",
+  "Absolute legs of steel.",
+  "Saving me a chair next time?",
+  "That line looked spicy from the lift.",
+  "Big day. Après was earned.",
+];
 
 const FRIENDS: [string, string][] = [
   ["dana", "alex"],

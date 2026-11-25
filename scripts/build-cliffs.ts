@@ -63,6 +63,61 @@ async function fetchDem(w: number, s: number, e: number, n: number, cols: number
   }
 }
 
+/**
+ * Outside the US there's no 3DEP lidar: fall back to the AWS terrain tiles the base mountain uses
+ * (Terrarium PNGs at zoom 15, ~3–5 m pixels over ~20–30 m real data in Canada). Same Mercator
+ * window and pixel grid as fetchDem, bilinear-sampled.
+ */
+const TERRARIUM_Z = 15;
+const terrariumTiles = new Map<string, Promise<PNG>>();
+function terrariumTile(x: number, y: number) {
+  const key = `${x}/${y}`;
+  if (!terrariumTiles.has(key))
+    terrariumTiles.set(
+      key,
+      fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${TERRARIUM_Z}/${x}/${y}.png`).then(async (res) => {
+        if (!res.ok) throw new Error(`terrain tile ${key}: ${res.status}`);
+        return PNG.sync.read(Buffer.from(await res.arrayBuffer()));
+      }),
+    );
+  return terrariumTiles.get(key)!;
+}
+async function terrariumDem(w: number, s: number, e: number, n: number, cols: number, rows: number) {
+  const R = 6378137;
+  const my = (lat: number) => R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  const latOf = (y: number) => (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * (180 / Math.PI);
+  const scale = 2 ** TERRARIUM_Z * 256;
+  const px = (lon: number) => ((lon + 180) / 360) * scale;
+  const py = (lat: number) => ((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * scale;
+  // fetch every tile the window touches first
+  const [x0, x1] = [Math.floor(px(w) / 256), Math.floor(px(e) / 256)];
+  const [y0, y1] = [Math.floor(py(n) / 256), Math.floor(py(s) / 256)];
+  const tiles = new Map<string, PNG>();
+  for (let x = x0; x <= x1 + 1; x++) for (let y = y0; y <= y1 + 1; y++) tiles.set(`${x}/${y}`, await terrariumTile(x, y));
+  const height = (gx: number, gy: number) => {
+    const t = tiles.get(`${Math.floor(gx / 256)}/${Math.floor(gy / 256)}`)!;
+    const i = ((Math.floor(gy) % 256) * 256 + (Math.floor(gx) % 256)) * 4;
+    return t.data[i] * 256 + t.data[i + 1] + t.data[i + 2] / 256 - 32768;
+  };
+  const out = new Float32Array(cols * rows);
+  const [mN, mS] = [my(n), my(s)];
+  for (let r = 0; r < rows; r++) {
+    const gy = py(latOf(mN + ((r + 0.5) / rows) * (mS - mN))) - 0.5;
+    for (let c = 0; c < cols; c++) {
+      const gx = px(w + ((c + 0.5) / cols) * (e - w)) - 0.5;
+      const fx = gx - Math.floor(gx);
+      const fy = gy - Math.floor(gy);
+      const a = height(gx, gy) * (1 - fx) + height(gx + 1, gy) * fx;
+      const b = height(gx, gy + 1) * (1 - fx) + height(gx + 1, gy + 1) * fx;
+      out[r * cols + c] = a * (1 - fy) + b * fy;
+    }
+  }
+  return out;
+}
+/** Coarse elevation smears a cliff over tens of metres, so it reads less steep: test a little lower. */
+const FINE_DEG_COARSE_DEM = 36;
+const COARSE_DEG_COARSE_DEM = 34;
+
 async function main() {
   const args = process.argv.slice(2);
   const slug = args[0];
@@ -114,8 +169,10 @@ async function main() {
   const gx = new Float32Array(GC * GR); // coarse downhill gradient, for aspect
   const gz = new Float32Array(GC * GR);
   const deg = (t: number) => (Math.atan(t) * 180) / Math.PI;
-  const tanFine = Math.tan((FINE_DEG * Math.PI) / 180);
-  const tanCoarse = Math.tan((COARSE_DEG * Math.PI) / 180);
+  const tanOf = (d: number) => Math.tan((d * Math.PI) / 180);
+  const [tanFineLidar, tanCoarseLidar] = [tanOf(FINE_DEG), tanOf(COARSE_DEG)];
+  const [tanFineCoarseDem, tanCoarseCoarseDem] = [tanOf(FINE_DEG_COARSE_DEM), tanOf(COARSE_DEG_COARSE_DEM)];
+  let noLidar = false;
   let tiles = 0;
   const nTiles = Math.ceil(GC / TILE_PX) * Math.ceil(GR / TILE_PX);
   for (let r0 = 0; r0 < GR; r0 += TILE_PX)
@@ -126,8 +183,17 @@ async function main() {
       const tr1 = Math.min(GR, r0 + TILE_PX + MARGIN);
       const tw = tc1 - tc0;
       const th = tr1 - tr0;
-      const z = await fetchDem(west + tc0 * lonPerPx, north - tr1 * latPerPx, west + tc1 * lonPerPx, north - tr0 * latPerPx, tw, th);
-      const at = (c: number, rr: number) => z[Math.min(th - 1, Math.max(0, rr)) * tw + Math.min(tw - 1, Math.max(0, c))];
+      const box = [west + tc0 * lonPerPx, north - tr1 * latPerPx, west + tc1 * lonPerPx, north - tr0 * latPerPx] as const;
+      let z = noLidar ? null : await fetchDem(...box, tw, th).catch(() => null);
+      const covered = z ? z.reduce((n, v) => n + (v > -500 && v < 9000 ? 1 : 0), 0) / z.length : 0;
+      if (!z || covered < 0.5) {
+        if (!noLidar) console.log(`\nno 3DEP lidar here (${Math.round(covered * 100)}% coverage): using terrain tiles`);
+        noLidar = true;
+        z = await terrariumDem(...box, tw, th);
+      }
+      const dem = z;
+      const [tanFine, tanCoarse] = noLidar ? [tanFineCoarseDem, tanCoarseCoarseDem] : [tanFineLidar, tanCoarseLidar];
+      const at = (c: number, rr: number) => dem[Math.min(th - 1, Math.max(0, rr)) * tw + Math.min(tw - 1, Math.max(0, c))];
       for (let rr = r0 - tr0; rr < Math.min(th, r0 - tr0 + TILE_PX); rr++)
         for (let c = c0 - tc0; c < Math.min(tw, c0 - tc0 + TILE_PX); c++) {
           const G = (rr + tr0) * GC + (c + tc0);
@@ -183,7 +249,7 @@ async function main() {
   console.log(`${nCells} rock cells (${((nCells * CELL_M * CELL_M) / 1e6).toFixed(2)} km² of exposed rock), steepness p50 ${steep[steep.length >> 1] ?? "-"}°`);
 
   data.cliffs = { cellM: CELL_M, cols, rows, items };
-  data.attribution = data.attribution.replace(/ Cliffs:.*$/, "") + " Cliffs: USGS 3DEP lidar.";
+  data.attribution = data.attribution.replace(/ Cliffs:.*$/, "") + (noLidar ? " Cliffs: from terrain tiles (no lidar here)." : " Cliffs: USGS 3DEP lidar.");
   writeFileSync(file, JSON.stringify(data));
   console.log(`→ ${file}`);
 

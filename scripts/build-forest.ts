@@ -133,6 +133,9 @@ interface Scene {
   covers: boolean;
 }
 
+/** Some catalog entries point at s3://bucket/key; fetch them over HTTPS like the rest. */
+const https = (href: string) => href.replace(/^s3:\/\/([^/]+)\//, "https://$1.s3.amazonaws.com/");
+
 async function findScenes(bbox: number[], months: [string, string], years: number[]): Promise<Scene[]> {
   const scenes: Scene[] = [];
   for (const y of years) {
@@ -161,12 +164,14 @@ async function findScenes(bbox: number[], months: [string, string], years: numbe
         return ins;
       };
       const [w, s, e, n] = bbox;
+      // Some catalog items only offer JPEG 2000 (.jp2) bands, which geotiff can't read; skip them.
+      if (![f.assets.red, f.assets.nir, f.assets.scl].every((a) => a && /\.tiff?$/i.test(a.href))) continue;
       scenes.push({
         id: f.id,
         cloud: f.properties["eo:cloud_cover"],
         epsg: f.properties["proj:epsg"] ?? f.properties["proj:code"],
         date: String(f.properties.datetime),
-        assets: { red: f.assets.red.href, green: f.assets.green.href, nir: f.assets.nir.href, scl: f.assets.scl.href },
+        assets: { red: https(f.assets.red.href), green: https(f.assets.green.href), nir: https(f.assets.nir.href), scl: https(f.assets.scl.href) },
         covers: inside(w, s) && inside(w, n) && inside(e, s) && inside(e, n),
       });
     }
@@ -348,11 +353,22 @@ async function main() {
   const thisYear = new Date().getFullYear();
   const years = [thisYear - 3, thisYear - 2, thisYear - 1, thisYear];
   const searchBox = [west, south, east, north];
+  // Snowy, cloudy places (Fernie, the Kootenays) can go a whole leaf-off window with no clear pass:
+  // widen to all of Oct–Nov, and as a last resort use summer alone (every tree then reads as evergreen).
+  const wider: Record<string, [string, string]> = lat0 >= 0 ? { leafOff: ["10-01", "11-30"], summer: ["06-15", "09-15"] } : { leafOff: ["04-01", "05-31"], summer: ["12-15", "03-15"] };
   const scenes: Record<string, Scene[]> = {};
   for (const [name, range] of Object.entries(seasons)) {
     scenes[name] = await findScenes(searchBox, range, years);
+    if (!scenes[name].length) {
+      console.log(`no clear ${name} scenes in ${range.join("–")}; widening to ${wider[name].join("–")}`);
+      scenes[name] = await findScenes(searchBox, wider[name], years);
+    }
     console.log(`${name} scenes: ${scenes[name].map((s) => s.id).join(", ")}`);
-    if (!scenes[name].length) throw new Error(`no clear Sentinel-2 scenes for ${name}`);
+  }
+  if (!scenes.summer.length) throw new Error("no clear Sentinel-2 summer scenes");
+  if (!scenes.leafOff.length) {
+    console.log("still no leaf-off scenes: using summer only (no deciduous/evergreen split)");
+    scenes.leafOff = scenes.summer;
   }
 
   // Only WorldCover tree pixels need spectra. SCL is 20 m; the sampler handles each band's resolution.

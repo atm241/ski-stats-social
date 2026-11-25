@@ -23,6 +23,8 @@ model User {
   color       String
   /// Opted in to the public "Everyone" leaderboard. Off by default: friends see your stats either way.
   globalBoard Boolean  @default(false)
+  /// Secret code in the user's invite link (/invite/<code>); opening it lets someone add them as a friend.
+  inviteCode  String?  @unique
   createdAt   DateTime @default(now())
   days        SkiDay[]
   sessions    Session[]
@@ -30,6 +32,9 @@ model User {
   following   Follow[] @relation("follower")
   followers   Follow[] @relation("following")
   apiTokens   ApiToken[]
+  comments    Comment[]
+  runs        Run[]
+  runLikes    RunLike[]
 }
 
 /// Personal access token for the iPhone sync app (Bearer auth on /api/uploads). Only the hash is stored.
@@ -139,8 +144,84 @@ model SkiDay {
   /// JSON: Segment[]
   segments      String
   createdAt     DateTime @default(now())
+  comments      Comment[]
+  runs          Run[]
 
   @@unique([userId, startedAt])
   @@index([seasonKey, flagged])
   @@index([userId, localDate])
+}
+
+/// A comment on someone's ski day.
+model Comment {
+  id        String   @id @default(cuid())
+  dayId     String
+  day       SkiDay   @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([dayId, createdAt])
+}
+
+/// One run (downhill segment) of a saved day at a mountain we have a trail map for, named when the day
+/// is saved, so per-trail leaderboards ("fastest down McConkey's") are plain queries.
+model Run {
+  id          String    @id @default(cuid())
+  dayId       String
+  day         SkiDay    @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// segment index within the day
+  index       Int
+  /// 3D mountain slug, e.g. "park-city"
+  mountain    String
+  /// the trail most of the run was on
+  trail       String
+  /// JSON: every trail along the way, in order, e.g. ["Georgeanna","McConkey's Bowl"]
+  trails      String
+  difficulty  String?
+  startedAt   DateTime
+  durationS   Float
+  verticalM   Float
+  maxSpeedMps Float
+  /// copied from the day: flagged days stay off speed boards
+  flagged     Boolean   @default(false)
+  likeCount   Int       @default(0)
+  likes       RunLike[]
+  /// one row per trail the run went down, with the top speed while on it
+  onTrails    RunTrail[]
+
+  @@unique([dayId, index])
+  @@index([mountain, trail])
+  @@index([mountain, likeCount])
+}
+
+model RunLike {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runId     String
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, runId])
+  @@index([runId])
+}
+
+/// A trail a run went down, with the top speed on that stretch: "fastest down McConkey's Bowl" means
+/// fastest while on McConkey's, not on the runout below it.
+model RunTrail {
+  runId       String
+  run         Run     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  mountain    String
+  trail       String
+  maxSpeedMps Float
+  /// share of the run's points on this trail
+  share       Float
+  userId      String
+  flagged     Boolean @default(false)
+
+  @@id([runId, trail])
+  @@index([mountain, trail, maxSpeedMps])
 }

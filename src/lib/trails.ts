@@ -23,7 +23,7 @@ const MIN_SHARE = 0.12;
  */
 /** Terrain and trail lookup per mountain, built once per loaded mountain file (rebuilt files are new objects). */
 const indexes = new WeakMap<MountainData, { terrain: ReturnType<typeof createTerrain>; names: ReturnType<typeof nameIndex> }>();
-function indexFor(data: MountainData) {
+export function indexFor(data: MountainData) {
   let hit = indexes.get(data);
   if (!hit) {
     const terrain = createTerrain(data);

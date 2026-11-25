@@ -7,6 +7,7 @@ import { inboundDomain } from "@/lib/inbound";
 import { regenerateUploadAddress, setGlobalBoard, signOut } from "../actions";
 import { CopyButton } from "./CopyButton";
 import { ProfileForm } from "./ProfileForm";
+import { DeleteAccount } from "./DeleteAccount";
 import { SyncTokens } from "./SyncTokens";
 
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -137,6 +138,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             })}
           </ul>
         )}
+      </section>
+
+      <section>
+        <SectionTitle>Delete account</SectionTitle>
+        <DeleteAccount username={me.username} />
       </section>
 
       <form action={signOut}>

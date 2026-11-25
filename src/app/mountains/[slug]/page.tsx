@@ -1,4 +1,4 @@
-import { Armchair } from "lucide-react";
+import { Armchair, Heart } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
@@ -9,11 +9,12 @@ import { MountainViewer } from "@/components/MountainViewer";
 import { Difficulty, SectionTitle } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { totals } from "@/lib/days";
-import { feet } from "@/lib/format";
+import { feet, mph } from "@/lib/format";
 import { listMountains, loadMountain } from "@/lib/mountain/registry";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
 import { currentUser } from "@/lib/auth";
 import { friendIds } from "@/lib/social";
+import { busiestTrails } from "@/lib/runs";
 import { mountainCompletions, trailStats } from "@/lib/stats";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -45,6 +46,7 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
   for (const d of seasonDays) byUser.set(d.userId, { user: d.user, days: [...(byUser.get(d.userId)?.days ?? []), d] });
   const board = [...byUser.values()].map((u) => ({ user: u.user, ...totals(u.days) })).sort((a, b) => b.verticalM - a.verticalM);
   const trails = seasonDays.length ? await trailStats(seasonDays) : null;
+  const boards = await busiestTrails(slug, 12);
 
   // "Ski every run": your progress here (all seasons), and your friends' for comparison
   const me = await currentUser();
@@ -155,6 +157,25 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
             </section>
           )}
         </div>
+      )}
+
+      {boards.length > 0 && (
+        <section>
+          <SectionTitle right="fastest and most liked runs">Trail leaderboards</SectionTitle>
+          <ul className="card grid divide-line overflow-hidden sm:grid-cols-2 sm:[&>li:nth-child(odd)]:border-r">
+            {boards.map((b) => (
+              <li key={b.trail} className="border-b border-line">
+                <Link href={`/mountains/${slug}/runs/${encodeURIComponent(b.trail)}`} className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-raised">
+                  <Difficulty level={b.difficulty} size={10} />
+                  <span className="min-w-0 flex-1 truncate">{b.trail}</span>
+                  <span className="num text-xs text-ink-faint">{b.runs} runs</span>
+                  <span className="num w-16 text-right text-xs text-ink-soft">{mph(b.topSpeedMps)} mph</span>
+                  <span className="num flex w-10 items-center justify-end gap-1 text-xs text-[#f472b6]">{b.topLikes > 0 && <><Heart size={11} fill="currentColor" aria-hidden />{b.topLikes}</>}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {days.length > 0 && (

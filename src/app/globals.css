@@ -87,3 +87,20 @@ body {
 @utility num {
   @apply font-mono tabular-nums tracking-tight;
 }
+
+/* ?embed=1 (the phone app shows pages in a web view): drop the site chrome around the content. */
+body:has([data-embed]) > header,
+body:has([data-embed]) > footer,
+body:has([data-embed]) [data-embed-hide] {
+  display: none;
+}
+body:has([data-embed]) > main {
+  max-width: none;
+  padding: 0;
+}
+body:has([data-embed]) [data-replay] {
+  height: calc(100dvh - 64px); /* leave room for the playback bar */
+  min-height: 0;
+  border-radius: 0;
+  border: 0;
+}

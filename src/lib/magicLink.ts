@@ -17,13 +17,14 @@ export function normalizeEmail(raw: string): string | null {
 
 export type LinkRequest = { ok: true; devLink?: string } | { ok: false; error: string };
 
-export async function requestLoginLink(email: string): Promise<LinkRequest> {
+/** `app`: the link signs the phone app in (it ends in a gapr:// deep link carrying an API token). */
+export async function requestLoginLink(email: string, opts: { app?: boolean } = {}): Promise<LinkRequest> {
   const recent = await prisma.loginToken.count({ where: { email, createdAt: { gt: new Date(Date.now() - LINK_TTL_MS) } } });
   if (recent >= MAX_LINKS_PER_WINDOW) return { ok: false, error: "Too many sign-in emails. Try again in a few minutes." };
 
   const token = newToken();
   await prisma.loginToken.create({ data: { email, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + LINK_TTL_MS) } });
-  const link = `${appUrl()}/auth/verify?token=${token}`;
+  const link = `${appUrl()}/auth/verify?token=${token}${opts.app ? "&app=1" : ""}`;
   const delivered = await sendEmail({
     to: email,
     subject: `Your ${APP_NAME} sign-in link`,

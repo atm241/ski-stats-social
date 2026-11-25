@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
-import type { MountainScene } from "./buildScene";
+import { DIFFICULTY, type MountainScene } from "./buildScene";
 
 const SKY = "#e7eaed";
 const FT = 3.28084;
+/** Line names show once the camera is this close (m): zoomed in on an area, not the whole-resort view. */
+const LINE_LABEL_DIST = 2600;
 
 /**
  * Renderer, lights, camera, orbit controls, peak labels and the render loop around a built
@@ -28,6 +30,7 @@ export function createStage(el: HTMLElement, built: MountainScene) {
   labelRenderer.domElement.style.position = "absolute";
   labelRenderer.domElement.style.inset = "0";
   labelRenderer.domElement.style.pointerEvents = "none";
+  labelRenderer.domElement.style.isolation = "isolate"; // keep its per-label z-indexes under the overlay panels
   el.appendChild(labelRenderer.domElement);
 
   const scene = new THREE.Scene();
@@ -73,7 +76,7 @@ export function createStage(el: HTMLElement, built: MountainScene) {
   const labelDivs: HTMLDivElement[] = [];
   for (const p of [...built.peaks].sort((a, b) => rank(b) - rank(a))) {
     const div = document.createElement("div");
-    div.className = "rounded-md border border-white/10 bg-[#090b10]/75 px-2 py-0.5 text-[11px] font-medium text-[#e8edf5] shadow-lg backdrop-blur whitespace-nowrap transition-opacity duration-200";
+    div.className = "rounded-md border border-white/10 bg-[#090b10]/85 px-2 py-0.5 text-[11px] font-medium text-[#e8edf5] whitespace-nowrap transition-opacity duration-200";
     labelDivs.push(div);
     div.textContent = p.ele ? `${p.name} · ${Math.round(p.ele * FT).toLocaleString()} ft` : p.name;
     const obj = new CSS2DObject(div);
@@ -81,6 +84,26 @@ export function createStage(el: HTMLElement, built: MountainScene) {
     peakLabels.add(obj);
   }
   scene.add(peakLabels);
+
+  // Named lines (Main Chute, Corbet's): small labels at the drop-in that appear as you get close,
+  // so the whole-resort view stays clean and zooming in reveals the local names.
+  const lineLabels = new THREE.Group();
+  const lineDivs: { div: HTMLDivElement; at: THREE.Vector3; obj: CSS2DObject }[] = [];
+  for (const l of built.lines) {
+    const div = document.createElement("div");
+    div.className = "rounded border border-white/5 bg-[#090b10]/75 px-1.5 py-px text-[10px] font-medium text-[#e8edf5] whitespace-nowrap transition-opacity duration-200";
+    const sym = document.createElement("span");
+    sym.className = "mr-1 text-[#8b95a8]";
+    sym.textContent = DIFFICULTY[l.difficulty]?.symbol ?? "";
+    div.append(sym, l.name);
+    div.style.opacity = "0";
+    const obj = new CSS2DObject(div);
+    obj.position.copy(l.labelAt);
+    lineLabels.add(obj);
+    obj.visible = false; // until the first declutter pass decides
+    lineDivs.push({ div, at: l.labelAt, obj });
+  }
+  scene.add(lineLabels);
 
   const resize = () => {
     const w = el.clientWidth;
@@ -97,17 +120,45 @@ export function createStage(el: HTMLElement, built: MountainScene) {
 
   // Some resorts have twenty-odd named summits; fade out any label that would overlap a higher one.
   // CSS2DRenderer owns `display` (frustum culling), so this uses opacity. Checked a few times a second.
+  /** Is there terrain between the camera and this point? Samples the heightfield along the sight line. */
+  const hidden = (at: THREE.Vector3) => {
+    const c = camera.position;
+    for (let k = 1; k < 16; k++) {
+      const f = k / 16;
+      const x = c.x + (at.x - c.x) * f;
+      const z = c.z + (at.z - c.z) * f;
+      if (built.terrain.yAt(x, z) > c.y + (at.y - c.y) * f + 8) return true;
+    }
+    return false;
+  };
+
+  // Line labels join the same pass after the peaks, steepest lines first, and only near the camera.
   let declutterTick = 0;
   const declutter = () => {
-    if (++declutterTick % 8 || !peakLabels.visible) return;
+    if (++declutterTick % 8) return;
+    // Measure every candidate first, then write opacities: interleaving reads and writes forces a
+    // layout per label, which cost Park City (26 peaks) ~15 fps.
+    const candidates: HTMLDivElement[] = [];
+    if (peakLabels.visible) for (const div of labelDivs) if (div.style.display !== "none") candidates.push(div);
+    // Out-of-range or behind-terrain line labels are made invisible (not just transparent) so the
+    // label renderer skips them; big maps like Whistler have ~150 named lines.
+    if (lineLabels.visible)
+      for (const l of lineDivs) {
+        const show = camera.position.distanceTo(l.at) < LINE_LABEL_DIST && !hidden(l.at);
+        if (l.obj.visible !== show) l.obj.visible = show;
+        if (show && l.div.style.display !== "none") candidates.push(l.div);
+      }
+    const rects = candidates.map((d) => d.getBoundingClientRect());
     const kept: DOMRect[] = [];
-    for (const div of labelDivs) {
-      if (div.style.display === "none") continue;
-      const r = div.getBoundingClientRect();
+    const shown = rects.map((r) => {
       const hit = kept.some((k) => r.left < k.right + 4 && r.right > k.left - 4 && r.top < k.bottom + 2 && r.bottom > k.top - 2);
-      div.style.opacity = hit ? "0" : "1";
       if (!hit) kept.push(r);
-    }
+      return !hit;
+    });
+    candidates.forEach((d, k) => {
+      const o = shown[k] ? "1" : "0";
+      if (d.style.opacity !== o) d.style.opacity = o;
+    });
   };
 
   const frameCallbacks: ((dt: number) => void)[] = [];
@@ -135,6 +186,7 @@ export function createStage(el: HTMLElement, built: MountainScene) {
     camera,
     controls,
     peakLabels,
+    lineLabels,
     homeView,
     onFrame: (cb: (dt: number) => void) => frameCallbacks.push(cb),
     afterRender: (cb: () => void) => afterRenderCallbacks.push(cb),

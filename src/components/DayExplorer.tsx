@@ -1,7 +1,9 @@
 "use client";
 
-import { Armchair, Coffee, Footprints, Car, TrendingDown } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Armchair, Coffee, Footprints, Car, Heart, TrendingDown, Trophy } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { setRunLikeAction } from "@/app/actions";
 import type { StoredTrack } from "@/lib/analysis/process";
 import type { Segment, SegmentKind } from "@/lib/analysis/types";
 import type { SegmentLabel } from "@/lib/trails";
@@ -42,7 +44,10 @@ type Item =
   | { type: "seg"; seg: number; runNo?: number; waitMs?: number }
   | { type: "break"; from: number; to: number };
 
-export function DayExplorer({ track, segments, labels, timeZone }: { track: StoredTrack; segments: Segment[]; labels: (SegmentLabel | null)[]; timeZone: string }) {
+/** Social bits for a named run: its likes, and where its trail's leaderboard lives. Keyed by segment index. */
+export type RunSocial = Record<number, { id: string; likes: number; liked: boolean; canLike: boolean; board: string }>;
+
+export function DayExplorer({ track, segments, labels, timeZone, runs }: { track: StoredTrack; segments: Segment[]; labels: (SegmentLabel | null)[]; timeZone: string; runs?: RunSocial }) {
   const pts = useMemo<Pt[]>(() => {
     const raw = track.pts.map(([dt, lat, lon, ele]) => ({ t: track.t0 + dt * 1000, lat, lon, ele }));
     let s = 0;
@@ -113,7 +118,7 @@ export function DayExplorer({ track, segments, labels, timeZone }: { track: Stor
                   </span>
                 </li>
               ) : (
-                <SegRow key={it.seg} item={it} seg={segments[it.seg]} label={labels[it.seg]} active={selected === it.seg} onClick={() => toggle(it.seg)} fmtTime={fmtTime} />
+                <SegRow key={it.seg} item={it} seg={segments[it.seg]} label={labels[it.seg]} active={selected === it.seg} onClick={() => toggle(it.seg)} fmtTime={fmtTime} social={runs?.[it.seg]} />
               ),
             )}
           </ol>
@@ -123,13 +128,13 @@ export function DayExplorer({ track, segments, labels, timeZone }: { track: Stor
   );
 }
 
-function SegRow({ item, seg, label, active, onClick, fmtTime }: { item: Extract<Item, { type: "seg" }>; seg: Segment; label: SegmentLabel | null; active: boolean; onClick: () => void; fmtTime: (t: number) => string }) {
+function SegRow({ item, seg, label, active, onClick, fmtTime, social }: { item: Extract<Item, { type: "seg" }>; seg: Segment; label: SegmentLabel | null; active: boolean; onClick: () => void; fmtTime: (t: number) => string; social?: RunSocial[number] }) {
   const ms = seg.endT - seg.startT;
   if (seg.kind === "run") {
     const avg = ms > 0 ? seg.distanceM / (ms / 1000) : 0;
     return (
-      <li>
-        <button type="button" onClick={onClick} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${active ? "bg-accent-dim" : "hover:bg-raised"}`}>
+      <li className={`flex items-stretch transition-colors ${active ? "bg-accent-dim" : "hover:bg-raised"}`}>
+        <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-start gap-3 py-3 pl-4 text-left">
           <span className="num mt-0.5 w-6 shrink-0 text-right text-sm text-ink-faint">{item.runNo}</span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -149,6 +154,7 @@ function SegRow({ item, seg, label, active, onClick, fmtTime }: { item: Extract<
             <div className="text-[11px] text-ink-faint">ft</div>
           </div>
         </button>
+        {social ? <RunActions social={social} /> : <span className="w-4 shrink-0" />}
       </li>
     );
   }
@@ -453,3 +459,34 @@ function niceTicks(min: number, max: number, count: number) {
   return out;
 }
 
+/** Like a run (optimistic) and jump to its trail's leaderboard. */
+function RunActions({ social }: { social: RunSocial[number] }) {
+  const [state, setState] = useState({ liked: social.liked, likes: social.likes });
+  const [pending, startTransition] = useTransition();
+  const toggle = () => {
+    const next = !state.liked;
+    setState((s) => ({ liked: next, likes: s.likes + (next ? 1 : -1) }));
+    startTransition(async () => {
+      const r = await setRunLikeAction(social.id, next);
+      if (r) setState({ liked: r.liked, likes: r.likeCount });
+    });
+  };
+  return (
+    <div className="flex shrink-0 flex-col items-center justify-center gap-1 px-3">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={!social.canLike || pending}
+        title={social.canLike ? (state.liked ? "Unlike this run" : "Like this run") : "Likes"}
+        aria-pressed={state.liked}
+        className={`num flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors ${state.liked ? "text-[#f472b6]" : "text-ink-faint"} ${social.canLike ? "hover:text-[#f472b6]" : "cursor-default"}`}
+      >
+        <Heart size={13} fill={state.liked ? "currentColor" : "none"} aria-hidden />
+        {state.likes > 0 && state.likes}
+      </button>
+      <Link href={social.board} title="This trail's leaderboard" className="text-ink-faint hover:text-accent">
+        <Trophy size={13} aria-hidden />
+      </Link>
+    </div>
+  );
+}

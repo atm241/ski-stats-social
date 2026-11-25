@@ -1,17 +1,19 @@
 import { ArrowDownRight, Gauge, Mountain, Play, Route, Timer, TrendingUp, Armchair, Hash } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteDay } from "@/app/actions";
+import { deleteCommentAction, deleteDay } from "@/app/actions";
 import { Avatar } from "@/components/Avatar";
 import { DayBreakdown } from "@/components/DayBreakdown";
-import { DayExplorer } from "@/components/DayExplorer";
+import { DayExplorer, type RunSocial } from "@/components/DayExplorer";
 import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, normDifficulty, SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { dayDetail } from "@/lib/days";
 import { clockTime, duration, feet, miles, mph, prettyDate } from "@/lib/format";
 import { loadMountain, mountainSlugForResort } from "@/lib/mountain/registry";
+import { dayComments } from "@/lib/comments";
 import { skiedWith } from "@/lib/social";
+import { CommentForm } from "./CommentForm";
 import { labelSegments } from "@/lib/trails";
 
 const KIND_LABEL: Record<string, string> = { resort: "Resort", backcountry: "Backcountry", mixed: "Resort + uphill" };
@@ -32,7 +34,14 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
   const { track, segments, flagReasons } = dayDetail(day);
   const slug = await mountainSlugForResort(day.resortName);
   const labels = slug ? labelSegments(track, segments, await loadMountain(slug)) : segments.map(() => null);
-  const companions = await skiedWith(day);
+  const [companions, comments, runRecords] = await Promise.all([
+    skiedWith(day),
+    dayComments(day.id),
+    prisma.run.findMany({ where: { dayId: day.id }, include: { likes: me ? { where: { userId: me.id }, select: { userId: true } } : false } }),
+  ]);
+  const runSocial: RunSocial = Object.fromEntries(
+    runRecords.map((r) => [r.index, { id: r.id, likes: r.likeCount, liked: !!r.likes?.length, canLike: !!me && me.id !== day.userId, board: `/mountains/${r.mountain}/runs/${encodeURIComponent(r.trail)}` }]),
+  );
   const isMine = me?.id === day.userId;
 
   const runs = segments.flatMap((s, i) => (s.kind === "run" ? [{ s, l: labels[i] }] : []));
@@ -97,7 +106,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
         <Stat label="Peak" value={feet(day.peakEleM)} unit="ft" icon={Mountain} />
       </section>
 
-      <DayExplorer track={track} segments={segments} labels={labels} timeZone={day.timezone} />
+      <DayExplorer track={track} segments={segments} labels={labels} timeZone={day.timezone} runs={runSocial} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card p-5">
@@ -193,6 +202,45 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
           </ul>
         </section>
       )}
+
+      <section className="card p-5">
+        <SectionTitle right={comments.length ? <span className="num">{comments.length}</span> : undefined}>Comments</SectionTitle>
+        {comments.length > 0 && (
+          <ul className="mb-4 space-y-4">
+            {comments.map((c) => (
+              <li key={c.id} className="flex gap-3">
+                <Link href={`/u/${c.user.username}`} className="shrink-0">
+                  <Avatar user={c.user} size={30} />
+                </Link>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 text-sm">
+                    <Link href={`/u/${c.user.username}`} className="font-medium hover:text-accent">
+                      {c.user.displayName}
+                    </Link>
+                    <span className="text-xs text-ink-faint">{c.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                    {me && (me.id === c.userId || me.id === day.userId) && (
+                      <form action={deleteCommentAction.bind(null, c.id, day.id)} className="ml-auto">
+                        <button className="text-xs text-ink-faint hover:text-bad">Delete</button>
+                      </form>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-sm whitespace-pre-wrap text-ink-soft">{c.body}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {me ? (
+          <CommentForm dayId={day.id} />
+        ) : (
+          <p className="text-sm text-ink-soft">
+            <Link href="/login" className="text-accent hover:text-accent-strong">
+              Sign in
+            </Link>{" "}
+            to comment.
+          </p>
+        )}
+      </section>
 
       {isMine && (
         <form action={deleteDay.bind(null, day.id)} className="text-right">

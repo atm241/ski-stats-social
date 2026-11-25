@@ -16,8 +16,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: `Replay: ${day.user.displayName} · ${day.resortName ?? "Backcountry"}, ${prettyDate(day.localDate, { month: "short", day: "numeric" })}` };
 }
 
-export default async function ReplayPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReplayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ embed?: string }> }) {
   const { id } = await params;
+  const embed = (await searchParams).embed === "1";
   const day = await prisma.skiDay.findUnique({ where: { id }, include: { user: true } });
   if (!day) notFound();
   const slug = await mountainSlugForResort(day.resortName);
@@ -27,8 +28,8 @@ export default async function ReplayPage({ params }: { params: Promise<{ id: str
   const title = `${day.user.displayName} · ${day.resortName} · ${prettyDate(day.localDate, { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-4" data-embed={embed || undefined}>
+      <div className="flex flex-wrap items-end justify-between gap-2" data-embed-hide>
         <div>
           <Link href={`/days/${day.id}`} className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink">
             <ArrowLeft size={14} aria-hidden /> Back to the day
@@ -57,7 +58,7 @@ export default async function ReplayPage({ params }: { params: Promise<{ id: str
       ) : (
         <p className="card p-6 text-center text-sm text-ink-soft">There&apos;s no 3D model of {day.resortName ?? "this area"} yet.</p>
       )}
-      <p className="text-xs text-ink-faint">Lunch and lift lines are sped through so the skiing gets the screen time. Drag to look around; the camera swings back behind you after a few seconds.</p>
+      <p className="text-xs text-ink-faint" data-embed-hide>Lunch and lift lines are sped through so the skiing gets the screen time. Drag to look around; the camera swings back behind you after a few seconds.</p>
     </div>
   );
 }

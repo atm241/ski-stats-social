@@ -87,7 +87,7 @@ async function main() {
   data.parks = parks;
   data.hikes = hikes;
 
-  // Landmarks: a run's midpoint (longest piece with that name), a named peak, or a fixed point.
+  // Landmarks: a point a third of the way down a run (longest piece with that name), a named peak, or a fixed point.
   // Mountains without a hand-picked list get automatic ones (see autoLandmarks).
   const specs = MOUNTAINS[slug]?.landmarks?.length ? MOUNTAINS[slug].landmarks : autoLandmarks(data, terrain);
   data.landmarks = specs.map((l) => {
@@ -95,7 +95,13 @@ async function main() {
     if (l.run) {
       const run = data.runs.filter((r) => r.name === l.run).sort((a, b) => b.coords.length - a.coords.length)[0];
       if (!run) throw new Error(`landmark run not found: ${l.run}`);
-      coord = run.coords[Math.floor(run.coords.length / 2)];
+      // a third of the way down by distance, where the line itself is (not the runout below it)
+      const pts = run.coords.map(([lon, lat]) => ({ lon, lat, xz: terrain.toXZ(lon, lat) }));
+      const down = terrain.yAt(...pts[0].xz) >= terrain.yAt(...pts[pts.length - 1].xz) ? pts : [...pts].reverse();
+      const cum = [0];
+      for (let k = 1; k < down.length; k++) cum.push(cum[k - 1] + Math.hypot(down[k].xz[0] - down[k - 1].xz[0], down[k].xz[1] - down[k - 1].xz[1]));
+      const at = down[Math.max(0, cum.findIndex((c) => c >= cum[cum.length - 1] * 0.35))];
+      coord = [at.lon, at.lat];
     }
     if (l.peak) {
       const peak = data.peaks.find((p) => p.name === l.peak);

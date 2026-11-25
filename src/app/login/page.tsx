@@ -8,9 +8,9 @@ import { LoginForm } from "./LoginForm";
 
 export const metadata = { title: "Sign in" };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ expired?: string; deleted?: string }> }) {
   if (await currentUser()) redirect("/");
-  const { expired } = await searchParams;
+  const { expired, deleted } = await searchParams;
   const demoUsers = process.env.NODE_ENV === "production" ? [] : await prisma.user.findMany({ where: { email: null }, orderBy: { displayName: "asc" } });
 
   return (
@@ -19,6 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1 className="text-2xl font-semibold tracking-tight">Sign in to {APP_NAME}</h1>
         <p className="mt-2 text-sm text-ink-soft">We&apos;ll email you a link. No password needed; new accounts are created automatically.</p>
       </div>
+      {deleted && <p className="rounded-lg border border-line bg-raised px-4 py-3 text-sm text-ink-soft">Your account and all your days were deleted.</p>}
       {expired && <p className="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">That link expired or was already used. Request a new one.</p>}
       <LoginForm />
 

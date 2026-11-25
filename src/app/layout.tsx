@@ -35,6 +35,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               )}
               <NavLink href="/leaderboard">Leaderboard</NavLink>
               <NavLink href="/mountains">3D</NavLink>
+              {user && (
+                <span className="hidden sm:inline">
+                  <NavLink href="/people">People</NavLink>
+                </span>
+              )}
               {user ? (
                 <>
                   <NavLink href={`/u/${user.username}`}>Stats</NavLink>

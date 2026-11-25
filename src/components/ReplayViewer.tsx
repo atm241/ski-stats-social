@@ -91,6 +91,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       const stage = createStage(el, built);
       const { scene, camera, controls, renderer } = stage;
       stage.peakLabels.visible = false;
+      stage.lineLabels.visible = false; // the HUD names the line you are on
 
       const tl = buildTimeline(track, segments, built.terrain, data);
       const park = createParkTricks(built.parkFeatures, built.terrain);
@@ -443,7 +444,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
 
   return (
     <div className="space-y-3">
-      <div className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-[#e7eaed] shadow-card">
+      <div data-replay className="relative h-[68vh] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-[#e7eaed] shadow-card">
         <div ref={host} className="absolute inset-0" />
         {status !== "ready" && (
           <div className="absolute inset-0 flex items-center justify-center text-ink-soft">

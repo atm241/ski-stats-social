@@ -46,11 +46,14 @@ async function main() {
   });
   const ourNames = new Set(config.resorts);
 
-  // --- runs, lifts, peaks from OpenStreetMap, searched a bit wider than the resort outlines
-  const w0 = Math.min(...ourResorts.map((r) => r.bbox[0]));
-  const s0 = Math.min(...ourResorts.map((r) => r.bbox[1]));
-  const e0 = Math.max(...ourResorts.map((r) => r.bbox[2]));
-  const n0 = Math.max(...ourResorts.map((r) => r.bbox[3]));
+  // --- runs, lifts, peaks from OpenStreetMap, searched a bit wider than the resort outlines.
+  // Some resorts are only a point in OpenSkiMap (Sunday River, Snowshoe): search a few km around it.
+  const POINT_PAD = 0.03; // degrees, ~3 km
+  const boxOf = (r: Resort) => (r.bbox[2] - r.bbox[0] < 1e-6 && r.bbox[3] - r.bbox[1] < 1e-6 ? [r.center[0] - POINT_PAD * 1.4, r.center[1] - POINT_PAD, r.center[0] + POINT_PAD * 1.4, r.center[1] + POINT_PAD] : r.bbox);
+  const w0 = Math.min(...ourResorts.map((r) => boxOf(r)[0]));
+  const s0 = Math.min(...ourResorts.map((r) => boxOf(r)[1]));
+  const e0 = Math.max(...ourResorts.map((r) => boxOf(r)[2]));
+  const n0 = Math.max(...ourResorts.map((r) => boxOf(r)[3]));
   const gLon = (e0 - w0) * SEARCH_GROW;
   const gLat = (n0 - s0) * SEARCH_GROW;
   const sb = `${s0 - gLat},${w0 - gLon},${n0 + gLat},${e0 + gLon}`;

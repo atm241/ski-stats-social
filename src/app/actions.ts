@@ -1,12 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createApiToken, createSession, currentUser, destroySession } from "@/lib/auth";
+import { createApiToken, createSession, currentUser, destroySession, SESSION_COOKIE } from "@/lib/auth";
 import { AVATAR_COLORS, AVATAR_EMOJI } from "@/lib/avatars";
 import { prisma } from "@/lib/db";
 import { normalizeEmail, redeemLoginLink, requestLoginLink } from "@/lib/magicLink";
+import { deleteUserAccount } from "@/lib/account";
+import { addComment, deleteComment } from "@/lib/comments";
+import { becomeFriends, inviterFor } from "@/lib/people";
+import { setRunLike } from "@/lib/runs";
+import { APP_SCHEME } from "@/lib/brand";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { newUploadToken } from "@/lib/tokens";
 
@@ -25,6 +30,8 @@ export async function requestLink(_: LinkState, form: FormData): Promise<LinkSta
 export async function verifyLogin(form: FormData) {
   const result = await redeemLoginLink(String(form.get("token") ?? ""));
   if (!result) redirect("/login?expired=1");
+  // From the phone app: hand it a revocable API token through its deep link instead of a browser session.
+  if (form.get("app")) redirect(`${APP_SCHEME}://auth?token=${encodeURIComponent(await createApiToken(result.user.id, "Gapr app"))}`);
   await createSession(result.user.id);
   redirect(result.isNew ? "/settings?welcome=1" : "/");
 }
@@ -97,6 +104,7 @@ export async function setFollow(username: string, follow: boolean) {
   revalidatePath(`/u/${username}`);
   revalidatePath("/");
   revalidatePath("/leaderboard");
+  revalidatePath("/people");
 }
 
 export type TokenState = { secret?: string; error?: string };
@@ -123,4 +131,58 @@ export async function setGlobalBoard(join: boolean) {
   if (!me) redirect("/login");
   await prisma.user.update({ where: { id: me.id }, data: { globalBoard: join } });
   revalidatePath("/", "layout");
+}
+
+export type DeleteAccountState = { error?: string };
+
+/**
+ * Permanently deletes the signed-in account: profile, every ski day and track, uploads, follows, sync
+ * tokens and sessions (all cascade from the user), plus any unused sign-in links for their email.
+ * The user must type their username to confirm.
+ */
+export async function deleteAccount(_: DeleteAccountState, form: FormData): Promise<DeleteAccountState> {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  if (String(form.get("confirm") ?? "").trim().toLowerCase() !== me.username) return { error: `Type ${me.username} to confirm.` };
+  await deleteUserAccount(me);
+  (await cookies()).delete(SESSION_COOKIE);
+  revalidatePath("/", "layout");
+  redirect("/login?deleted=1");
+}
+
+/** Like or unlike someone's run (not your own). Returns the new state, or null if not allowed. */
+export async function setRunLikeAction(runId: string, like: boolean) {
+  const me = await currentUser();
+  if (!me) return null;
+  const r = await setRunLike(me.id, runId, like);
+  return r;
+}
+
+export type CommentState = { error?: string; ok?: number };
+
+export async function addCommentAction(dayId: string, _: CommentState, form: FormData): Promise<CommentState> {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const r = await addComment(me.id, dayId, String(form.get("body") ?? ""));
+  if (!r.ok) return { error: r.error };
+  revalidatePath(`/days/${dayId}`);
+  return { ok: Date.now() }; // a fresh value each time, so the form knows to clear
+}
+
+export async function deleteCommentAction(commentId: string, dayId: string) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  await deleteComment(me.id, commentId);
+  revalidatePath(`/days/${dayId}`);
+}
+
+/** Accept someone's invite link: you become friends (each follows the other). */
+export async function acceptInvite(code: string) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const inviter = await inviterFor(code);
+  if (!inviter) redirect("/people");
+  await becomeFriends(me.id, inviter.id);
+  revalidatePath("/", "layout");
+  redirect(`/u/${inviter.username}`);
 }

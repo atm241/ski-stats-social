@@ -2,6 +2,7 @@ import type { SkiDay, User } from "@prisma/client";
 import type { ProcessedDay, StoredTrack } from "./analysis/process";
 import type { Segment } from "./analysis/types";
 import { prisma } from "./db";
+import { indexRuns } from "./runs";
 
 export type SaveOutcome = { status: "saved"; day: SkiDay } | { status: "duplicate"; localDate: string };
 
@@ -47,6 +48,7 @@ export async function saveDay(userId: string, d: ProcessedDay, source: string, f
       segments: JSON.stringify(d.stats.segments),
     },
   });
+  await indexRuns(day); // name its runs now so trail leaderboards are plain queries
   return { status: "saved", day };
 }
 
