@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { devSignIn } from "../actions";
 import { LoginForm } from "./LoginForm";
 
+export const metadata = { title: "Sign in" };
+
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
   if (await currentUser()) redirect("/");
   const { expired } = await searchParams;

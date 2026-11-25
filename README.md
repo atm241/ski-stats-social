@@ -1,4 +1,4 @@
-# Pow Pals (working name)
+# Gapr
 
 A ski social app and global leaderboard: vertical feet, days skied and unique resorts, resort and backcountry.
 
@@ -49,7 +49,7 @@ npm run dev          # http://localhost:3000
 
 - **Sign-in:** email magic link (`src/lib/magicLink.ts`). Links are single-use, expire in 15 minutes, and are redeemed by a button POST so email scanners can't burn them. Sessions are database-backed; only token hashes are stored. Without `RESEND_API_KEY`, emails print to the server console and the login page shows the link (dev only). Demo skiers can be signed into from `/login` in dev.
 - **Email-to-upload:** each account gets `<token>@INBOUND_DOMAIN` (shown in `/settings`). Inbound mail arrives via Postmark's webhook at `/api/inbound/postmark`, GPX attachments go through the same `ingestFile` pipeline as web uploads, every file is logged in `Upload`, and a receipt goes to the account's own email. Try it locally: `npx tsx --env-file=.env scripts/send-test-email.ts <your-upload-address>`.
-- **Apple Watch / iPhone (no Strava):** two routes. (1) *Apple Health export*: on `/upload`, pick the `export.zip` from Health → Export All Health Data. It's read in the browser (`src/lib/healthExport.ts`, streamed with fflate); only skiing/snowboarding workout routes are extracted and uploaded. (2) *Pow Pals Sync iPhone app* (`ios/PowPalsSync`): reads ski workouts and routes from HealthKit and uploads new ones automatically using a personal token from Settings → iPhone sync (`ApiToken`, `Authorization: Bearer pp_…`, only hashes stored). Apple routes carry GPS Doppler speed and accuracy; the parser drops fixes with hAcc > 50 m and top speed uses device speed (median of 3) when present.
+- **Apple Watch / iPhone (no Strava):** two routes. (1) *Apple Health export*: on `/upload`, pick the `export.zip` from Health → Export All Health Data. It's read in the browser (`src/lib/healthExport.ts`, streamed with fflate); only skiing/snowboarding workout routes are extracted and uploaded. (2) *iPhone sync app* (`ios/PowPalsSync`): reads ski workouts and routes from HealthKit and uploads new ones automatically using a personal token from Settings → iPhone sync (`ApiToken`, `Authorization: Bearer pp_…`, only hashes stored). Apple routes carry GPS Doppler speed and accuracy; the parser drops fixes with hAcc > 50 m and top speed uses device speed (median of 3) when present.
 - **Not supported (by design, for now):** Strava (its API terms only allow showing data to its owner, not leaderboards), Slopes (no API), Garmin (developer program paused). Apple Health / Health Connect need a native app.
 
 ## Before deploying

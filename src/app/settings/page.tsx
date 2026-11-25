@@ -4,7 +4,7 @@ import { SectionTitle } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { inboundDomain } from "@/lib/inbound";
-import { regenerateUploadAddress, signOut } from "../actions";
+import { regenerateUploadAddress, setGlobalBoard, signOut } from "../actions";
 import { CopyButton } from "./CopyButton";
 import { ProfileForm } from "./ProfileForm";
 import { SyncTokens } from "./SyncTokens";
@@ -15,6 +15,8 @@ const STATUS: Record<string, { label: string; className: string }> = {
   skipped: { label: "Skipped", className: "text-warn border-warn/30 bg-warn/10" },
   error: { label: "Failed", className: "text-bad border-bad/30 bg-bad/10" },
 };
+
+export const metadata = { title: "Settings" };
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
   const me = await requireUser();
@@ -69,6 +71,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
         </section>
       </div>
+
+      <section id="leaderboards">
+        <SectionTitle>Leaderboards</SectionTitle>
+        <div className="card flex flex-wrap items-center justify-between gap-4 p-5 text-sm">
+          <div className="max-w-xl">
+            <div className="font-medium">{me.globalBoard ? "You're on the public leaderboard" : "You're on friends boards only"}</div>
+            <p className="mt-1 text-ink-soft">
+              Friends (people you follow who follow you back) always see your stats. The public board ranks everyone who joins it by vertical, days, resorts, best day and uphill. Top speed is never ranked publicly.
+            </p>
+          </div>
+          <form action={setGlobalBoard.bind(null, !me.globalBoard)}>
+            <button className={me.globalBoard ? "btn-ghost" : "btn-primary"}>{me.globalBoard ? "Leave the public board" : "Join the public board"}</button>
+          </form>
+        </div>
+      </section>
 
       <section>
         <SectionTitle>iPhone sync</SectionTitle>

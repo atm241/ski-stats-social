@@ -81,7 +81,7 @@ struct ContentView: View {
             .scrollContentBackground(.hidden)
             .background(Color(red: 0.035, green: 0.043, blue: 0.063))
             .listRowBackground(surface)
-            .navigationTitle("Pow Pals")
+            .navigationTitle("Gapr")
             .tint(accent)
             .task {
                 server = sync.serverURL

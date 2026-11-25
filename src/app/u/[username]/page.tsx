@@ -6,6 +6,7 @@ import { DayCard } from "@/components/DayCard";
 import { FollowButton } from "@/components/FollowButton";
 import { MilestoneBar } from "@/components/MilestoneBar";
 import { PersonalBests } from "@/components/PersonalBests";
+import { CompletionList } from "@/components/Completion";
 import { SeasonChart } from "@/components/SeasonChart";
 import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, SectionTitle, Stat } from "@/components/ui";
 import { currentUser } from "@/lib/auth";
@@ -14,7 +15,13 @@ import { totals } from "@/lib/days";
 import { duration, feet, miles, mph } from "@/lib/format";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
 import { followCounts, isFollowing } from "@/lib/social";
-import { trailStats } from "@/lib/stats";
+import { mountainCompletions, trailStats } from "@/lib/stats";
+
+export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = await params;
+  const u = await prisma.user.findUnique({ where: { username }, select: { displayName: true } });
+  return { title: u ? `${u.displayName} (@${username})` : "Not found" };
+}
 
 export default async function ProfilePage({ params, searchParams }: { params: Promise<{ username: string }>; searchParams: Promise<{ season?: string }> }) {
   const { username } = await params;
@@ -33,6 +40,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
   const liftWait = counted.reduce((a, d) => a + d.liftWaitS, 0);
   const topSpeed = Math.max(0, ...counted.map((d) => d.maxSpeedMps));
   const [counts, following, trails] = await Promise.all([followCounts(user.id), me && me.id !== user.id ? isFollowing(me.id, user.id) : false, trailStats(counted)]);
+  const completions = await mountainCompletions(user.days); // all seasons
 
   const resorts = new Map<string, { name: string; days: number; verticalM: number }>();
   for (const d of counted) {
@@ -92,7 +100,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       {counted.length > 0 && (
         <section className="card p-5">
           <SectionTitle right={t.days > 0 ? <span className="num">{feet(t.verticalM / t.days)} ft / day avg</span> : undefined}>Vertical by day</SectionTitle>
-          <SeasonChart days={days} />
+          <SeasonChart days={days.map((d) => ({ id: d.id, localDate: d.localDate, resortName: d.resortName, verticalM: d.verticalM, runCount: d.runCount, flagged: d.flagged }))} />
         </section>
       )}
 
@@ -100,6 +108,13 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
         <section>
           <SectionTitle>Personal bests</SectionTitle>
           <PersonalBests days={counted} />
+        </section>
+      )}
+
+      {completions.length > 0 && (
+        <section>
+          <SectionTitle right="all seasons">Runs skied</SectionTitle>
+          <CompletionList items={completions} />
         </section>
       )}
 

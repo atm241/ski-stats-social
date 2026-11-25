@@ -12,6 +12,7 @@ import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 import type { StoredTrack } from "@/lib/analysis/process";
 import type { Segment } from "@/lib/analysis/types";
 import { buildMountainScene } from "@/lib/mountain/buildScene";
+import { createOccluderHider } from "@/lib/mountain/occlusion";
 import { createParkTricks, type TrickFrame } from "@/lib/mountain/park";
 import { type Activity, buildTimeline, indexAt, type ReplayPoint } from "@/lib/mountain/replay";
 import { createSkier } from "@/lib/mountain/skier";
@@ -48,8 +49,13 @@ interface Engine {
   cancelRecording: () => void;
 }
 
-export function ReplayViewer(props: { slug: string; track: StoredTrack; segments: Segment[]; timeZone: string; rider: { avatar: string; displayName: string }; title: string }) {
-  const { slug, track, segments, timeZone, rider, title } = props;
+type Rider = { avatar: string; displayName: string };
+/** A friend who skied with the rider that day: drawn as a second skier at the same clock time. */
+export type ReplayCompanion = { track: StoredTrack; segments: Segment[]; rider: Rider };
+const COMPANION_COLORS = ["#ff7a59", "#a78bfa", "#34d399", "#fbbf24"];
+
+export function ReplayViewer(props: { slug: string; track: StoredTrack; segments: Segment[]; timeZone: string; rider: Rider; title: string; companions?: ReplayCompanion[] }) {
+  const { slug, track, segments, timeZone, rider, title, companions } = props;
   const host = useRef<HTMLDivElement>(null);
   const engine = useRef<Engine | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -88,6 +94,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
 
       const tl = buildTimeline(track, segments, built.terrain, data);
       const park = createParkTricks(built.parkFeatures, built.terrain);
+      const stationHider = createOccluderHider(built.stations); // lift stations in front of the camera get out of the way
       const pts = tl.points;
       const n = pts.length;
       const clockFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone });
@@ -130,15 +137,53 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       };
 
       // Skier + floating avatar bubble
+      const nameBubble = (name: string, color: string) => {
+        const bubble = document.createElement("div");
+        bubble.className = "flex items-center gap-1.5 rounded-full border border-white/10 bg-[#090b10]/80 py-0.5 pr-2.5 pl-0.5 text-xs font-medium text-[#e8edf5] shadow-lg backdrop-blur whitespace-nowrap";
+        bubble.innerHTML = `<span style="display:inline-flex;width:20px;height:20px;border-radius:999px;align-items:center;justify-content:center;font-size:9px;font-weight:600;background:${color}26;color:${color}"></span><span></span>`;
+        (bubble.children[0] as HTMLElement).textContent = initials(name);
+        (bubble.children[1] as HTMLElement).textContent = name;
+        const marker = new CSS2DObject(bubble);
+        scene.add(marker);
+        return marker;
+      };
       const skier = createSkier();
       scene.add(skier.object);
-      const bubble = document.createElement("div");
-      bubble.className = "flex items-center gap-1.5 rounded-full border border-white/10 bg-[#090b10]/80 py-0.5 pr-2.5 pl-0.5 text-xs font-medium text-[#e8edf5] shadow-lg backdrop-blur whitespace-nowrap";
-      bubble.innerHTML = `<span style="display:inline-flex;width:20px;height:20px;border-radius:999px;align-items:center;justify-content:center;font-size:9px;font-weight:600;background:#5cc8ff26;color:#5cc8ff"></span><span></span>`;
-      (bubble.children[0] as HTMLElement).textContent = initials(rider.displayName);
-      (bubble.children[1] as HTMLElement).textContent = rider.displayName;
-      const marker = new CSS2DObject(bubble);
-      scene.add(marker);
+      const marker = nameBubble(rider.displayName, "#5cc8ff");
+
+      // Friends who skied that day ride along on their own tracks, matched by clock time.
+      const crew = (companions ?? []).map((c, k) => {
+        const color = COMPANION_COLORS[k % COMPANION_COLORS.length];
+        const fig = createSkier(color);
+        scene.add(fig.object);
+        return { pts: buildTimeline(c.track, c.segments, built.terrain, data).points, fig, marker: nameBubble(c.rider.displayName, color), yaw: 0, pos: new THREE.Vector3() };
+      });
+      const placeCrew = (t: number, dt: number) => {
+        for (const m of crew) {
+          const P = m.pts;
+          const on = P.length > 1 && t >= P[0].t && t <= P[P.length - 1].t;
+          m.fig.object.visible = on;
+          m.marker.visible = on;
+          if (!on) continue;
+          let lo = 0;
+          let hi = P.length - 1;
+          while (lo < hi) {
+            const mid = (lo + hi + 1) >> 1;
+            if (P[mid].t <= t) lo = mid;
+            else hi = mid - 1;
+          }
+          const a = P[lo];
+          const b = P[Math.min(lo + 1, P.length - 1)];
+          const f = b.t > a.t ? Math.min(1, (t - a.t) / (b.t - a.t)) : 0;
+          m.pos.set(a.x + (b.x - a.x) * f, 0, a.z + (b.z - a.z) * f);
+          m.pos.y = a.activity === "lift" ? a.y + (b.y - a.y) * f : built.terrain.yAt(m.pos.x, m.pos.z);
+          if (Math.hypot(b.x - a.x, b.z - a.z) > 1) m.yaw = lerpAngle(m.yaw, Math.atan2(b.x - a.x, b.z - a.z), 1 - Math.exp(-dt * 6));
+          m.fig.object.position.copy(m.pos);
+          m.fig.object.rotation.y = m.yaw;
+          m.fig.pose(a.activity, isPlaying ? dt * Math.min(2, speedX) : 0, null);
+          m.marker.position.copy(m.pos).add(new THREE.Vector3(0, m.fig.height + 10, 0));
+        }
+      };
 
       // Trail: whole day as one line, revealed progressively via instanceCount
       const trailGeo = new LineGeometry();
@@ -306,6 +351,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         skier.object.rotation.y = yaw;
         skier.pose(a.activity, isPlaying ? dt * Math.min(2, speedX) : 0, trick);
         marker.position.copy(pos).add(new THREE.Vector3(0, skier.height + 10, 0));
+        if (crew.length) placeCrew(a.t + (b.t - a.t) * (b.p > a.p ? Math.min(1, (playhead - a.p) / (b.p - a.p)) : 0), dt);
         trailGeo.instanceCount = i;
 
         // follow: move camera and target together, then ease the camera round behind the skier
@@ -327,6 +373,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
           sph.phi += ((inPipe ? 0.75 : 1.15) - sph.phi) * (1 - Math.exp(-dt * 2)) * parkBlend;
           camera.position.copy(controls.target).add(offset.setFromSpherical(sph));
         }
+        stationHider.update(camera.position, controls.target);
 
         hudTimer -= dt;
         if (hudTimer <= 0) {
@@ -378,6 +425,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
         finishRecording(false);
         engine.current = null;
         skier.dispose();
+        crew.forEach((m) => m.fig.dispose());
         trailGeo.dispose();
         trailMat.dispose();
         stage.dispose();
@@ -388,7 +436,7 @@ export function ReplayViewer(props: { slug: string; track: StoredTrack; segments
       disposed = true;
       cleanup();
     };
-  }, [slug, track, segments, timeZone, rider, title]);
+  }, [slug, track, segments, timeZone, rider, title, companions]);
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const total = lengthMin * 60;

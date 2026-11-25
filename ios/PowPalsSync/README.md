@@ -1,6 +1,6 @@
-# Pow Pals Sync (iPhone)
+# Gapr Sync (iPhone)
 
-Uploads your Apple Watch / iPhone **skiing and snowboarding workouts** to Pow Pals automatically: no Strava, no manual exports. It reads only workouts and their GPS routes from HealthKit (read-only), turns each route into GPX with the watch's own GPS speed and accuracy, and posts it to `/api/uploads` with a personal token. The server analyses it like any other upload: runs, lifts, named trails, vertical, top speed.
+Uploads your Apple Watch / iPhone **skiing and snowboarding workouts** to Gapr automatically: no Strava, no manual exports. It reads only workouts and their GPS routes from HealthKit (read-only), turns each route into GPX with the watch's own GPS speed and accuracy, and posts it to `/api/uploads` with a personal token. The server analyses it like any other upload: runs, lifts, named trails, vertical, top speed.
 
 ## Run it
 

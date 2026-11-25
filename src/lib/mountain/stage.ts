@@ -149,4 +149,3 @@ export function createStage(el: HTMLElement, built: MountainScene) {
   };
 }
 
-export type Stage = ReturnType<typeof createStage>;

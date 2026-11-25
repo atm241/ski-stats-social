@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createApiToken, createSession, currentUser, destroySession } from "@/lib/auth";
 import { AVATAR_COLORS, AVATAR_EMOJI } from "@/lib/avatars";
 import { prisma } from "@/lib/db";
 import { normalizeEmail, redeemLoginLink, requestLoginLink } from "@/lib/magicLink";
+import { clientIp, rateLimit } from "@/lib/rateLimit";
 import { newUploadToken } from "@/lib/tokens";
 
 export type LinkState = { sentTo?: string; devLink?: string; error?: string };
@@ -13,6 +15,8 @@ export type LinkState = { sentTo?: string; devLink?: string; error?: string };
 export async function requestLink(_: LinkState, form: FormData): Promise<LinkState> {
   const email = normalizeEmail(String(form.get("email") ?? ""));
   if (!email) return { error: "That doesn't look like an email address." };
+  // per address is limited in requestLoginLink; this stops one sender mailing many addresses
+  if (!rateLimit(`login-ip:${clientIp(await headers())}`, 10, 15 * 60_000)) return { error: "Too many sign-in emails from here. Try again in a few minutes." };
   const r = await requestLoginLink(email);
   return r.ok ? { sentTo: email, devLink: r.devLink } : { error: r.error };
 }
@@ -111,4 +115,12 @@ export async function revokeSyncToken(id: string) {
   if (!me) redirect("/login");
   await prisma.apiToken.deleteMany({ where: { id, userId: me.id } });
   revalidatePath("/settings");
+}
+
+/** Join or leave the public leaderboard (friends boards always include you). */
+export async function setGlobalBoard(join: boolean) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  await prisma.user.update({ where: { id: me.id }, data: { globalBoard: join } });
+  revalidatePath("/", "layout");
 }

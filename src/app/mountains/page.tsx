@@ -2,6 +2,8 @@ import { ArrowRight, Box } from "lucide-react";
 import Link from "next/link";
 import { listMountains } from "@/lib/mountain/registry";
 
+export const metadata = { title: "3D mountains" };
+
 export default async function MountainsPage() {
   const mountains = await listMountains();
   return (

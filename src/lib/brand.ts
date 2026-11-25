@@ -1,3 +1,5 @@
-/** Placeholder product name — change it here. */
-export const APP_NAME = "Pow Pals";
-export const TAGLINE = "Your ski crew, your vert, one big leaderboard.";
+/** Product name — change it here. */
+export const APP_NAME = "Gapr";
+/** For tight spots like the nav bar. */
+export const APP_SHORT_NAME = "Gapr";
+export const TAGLINE = "Your vert, your crew, one big leaderboard. All gapers welcome.";

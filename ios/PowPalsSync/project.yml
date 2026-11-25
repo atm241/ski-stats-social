@@ -22,11 +22,11 @@ targets:
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Pow Pals
+        CFBundleDisplayName: Gapr
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-        NSHealthShareUsageDescription: Pow Pals reads your skiing and snowboarding workouts and their GPS routes to log your days, vertical and top speed. Nothing else from Health is read.
+        NSHealthShareUsageDescription: Gapr reads your skiing and snowboarding workouts and their GPS routes to log your days, vertical and top speed. Nothing else from Health is read.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:

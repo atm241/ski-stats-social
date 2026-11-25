@@ -7,8 +7,10 @@ const GUIDES = [
   { app: "Slopes", steps: "Logbook → open a day → ••• → Export As → GPX (Active Time or All Day)." },
   { app: "Garmin", steps: "Garmin Connect (web) → Activities → open the ski activity → settings → Export to GPX." },
   { app: "Strava", steps: "strava.com → open the activity → ••• → Export GPX." },
-  { app: "Apple Watch", steps: "Use the Apple Health import above, or the Pow Pals iPhone app to sync automatically after each workout." },
+  { app: "Apple Watch", steps: "Use the Apple Health import above, or the Gapr iPhone app to sync automatically after each workout." },
 ];
+
+export const metadata = { title: "Upload" };
 
 export default async function UploadPage() {
   await requireUser();

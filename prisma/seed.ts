@@ -131,7 +131,7 @@ const SKIERS: { username: string; displayName: string; avatar: string; color: st
     displayName: "Alex Moreno",
     avatar: "🏂",
     color: "peach",
-    trips: [{ mountain: "snowbird-alta", days: 2, withUser: "dana", lagS: 50 }],
+    trips: [{ mountain: "snowbird-alta", days: 2, withUser: "dana", lagS: 5 }], // a chair behind: same lifts, same runs
   },
 ];
 
@@ -150,7 +150,8 @@ async function main() {
 
   let seed = 1;
   for (const s of SKIERS) {
-    const user = await prisma.user.create({ data: { username: s.username, displayName: s.displayName, avatar: s.avatar, color: s.color } });
+    // demo skiers are on the public board, except Sam, who keeps to friends
+    const user = await prisma.user.create({ data: { username: s.username, displayName: s.displayName, avatar: s.avatar, color: s.color, globalBoard: s.username !== "skintrack_sam" } });
     let saved = 0;
     for (const trip of s.trips) {
       const rand = rng(seed++);
@@ -199,7 +200,21 @@ async function main() {
     }
     console.log(`${s.displayName}: ${saved} days`);
   }
+
+  // Friends are mutual follows; Rosie follows Dana without being followed back (so she's not a friend).
+  const ids = new Map((await prisma.user.findMany({ where: { email: null }, select: { id: true, username: true } })).map((u) => [u.username, u.id]));
+  const follow = (a: string, b: string) => prisma.follow.create({ data: { followerId: ids.get(a)!, followingId: ids.get(b)! } });
+  for (const [a, b] of FRIENDS) await Promise.all([follow(a, b), follow(b, a)]);
+  await follow("rosie", "dana");
 }
+
+const FRIENDS: [string, string][] = [
+  ["dana", "alex"],
+  ["dana", "priya"],
+  ["priya", "kai"],
+  ["maya", "theo"],
+  ["lena", "jordan"],
+];
 
 main()
   .catch((e) => {

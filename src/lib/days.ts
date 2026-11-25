@@ -130,12 +130,13 @@ export interface LeaderboardRow extends SeasonTotals {
 }
 
 /**
- * Season leaderboard. Aggregates in memory, which is fine for a small user base;
- * at scale, move this to a SQL GROUP BY or a materialized per-user season table.
+ * Season leaderboard, either for a set of people (a friends board) or the public board of everyone who
+ * opted in. Aggregates in memory, which is fine for a small user base; at scale, move this to a SQL
+ * GROUP BY or a materialized per-user season table.
  */
-export async function leaderboard(seasonKey: string, metric: Metric, userIds?: string[]): Promise<LeaderboardRow[]> {
+export async function leaderboard(seasonKey: string, metric: Metric, scope: string[] | "public"): Promise<LeaderboardRow[]> {
   const days = await prisma.skiDay.findMany({
-    where: { seasonKey, flagged: false, ...(userIds ? { userId: { in: userIds } } : {}) },
+    where: { seasonKey, flagged: false, ...(scope === "public" ? { user: { globalBoard: true } } : { userId: { in: scope } }) },
     select: { userId: true, verticalM: true, uphillM: true, localDate: true, resortId: true, kind: true, distanceM: true, skiTimeS: true, user: true },
   });
 

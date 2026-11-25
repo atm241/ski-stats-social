@@ -1,6 +1,6 @@
 "use client";
 
-import { Mountain, MapPin, Pause, RotateCw, Sparkles, Triangle, type LucideIcon } from "lucide-react";
+import { Check, Mountain, MapPin, Pause, RotateCw, Sparkles, Triangle, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Difficulty } from "./ui";
 import * as THREE from "three";
@@ -12,18 +12,25 @@ type Hover = { x: number; y: number; title: string; sub: string } | null;
 const LANDMARK_ICON: Record<string, LucideIcon> = { cliff: Mountain, park: Sparkles, pipe: Sparkles, peak: Triangle };
 const GLASS_BTN = "inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-bg/75 px-3 py-1.5 text-sm text-ink backdrop-blur transition-colors hover:bg-bg/90";
 
-export function MountainViewer({ slug }: { slug: string }) {
+/** `skiedRuns`: the signed-in skier's runs here, for the "My runs" overlay and hover ticks. */
+export function MountainViewer({ slug, skiedRuns }: { slug: string; skiedRuns?: string[] }) {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [hover, setHover] = useState<Hover>(null);
   const [spin, setSpin] = useState(true);
   const [labels, setLabels] = useState(true);
   const [trails, setTrails] = useState(true);
+  const [mine, setMine] = useState(false);
+  const skied = useRef(new Set<string>());
+  useEffect(() => {
+    skied.current = new Set(skiedRuns ?? []);
+  }, [skiedRuns]);
   const [landmarks, setLandmarks] = useState<{ name: string; kind: string }[]>([]);
   const api = useRef<{
     setSpin: (v: boolean) => void;
     setLabels: (v: boolean) => void;
     setTrails: (v: boolean) => void;
+    setMine: (v: boolean) => void;
     resetView: () => void;
     baseView: () => void;
     flyTo: (i: number) => void;
@@ -120,7 +127,7 @@ export function MountainViewer({ slug }: { slug: string }) {
           if (run) {
             setHighlight(run.index);
             const d = DIFFICULTY[run.difficulty];
-            setHover({ ...at, title: run.name ?? "Unnamed run", sub: `${d.symbol} ${d.label}` });
+            setHover({ ...at, title: run.name ?? "Unnamed run", sub: `${d.symbol} ${d.label}${run.name && skied.current.has(run.name) ? " · you've skied it" : ""}` });
           }
         } else {
           setHighlight(-1);
@@ -146,6 +153,17 @@ export function MountainViewer({ slug }: { slug: string }) {
         setSpin: (v) => (controls.autoRotate = v),
         setLabels: (v) => (labelGroup.visible = v),
         setTrails: (v) => built.runGroup.forEach((m) => (m.visible = v)),
+        setMine: (v) => {
+          const box = built.highlightRuns(v ? skied.current : null);
+          if (!v || !box) return;
+          // fly round to frame the runs you've skied, keeping the current viewing direction
+          const target = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const dir = camera.position.clone().sub(controls.target).normalize();
+          controls.autoRotate = false;
+          setSpin(false);
+          flight = { from: camera.position.clone(), fromT: controls.target.clone(), to: target.clone().add(dir.multiplyScalar(Math.max(size.x, size.z) * 1.2 + 500)), toT: target, t: 0 };
+        },
         resetView: () => {
           stage.homeView();
           setLabels(true);
@@ -185,6 +203,9 @@ export function MountainViewer({ slug }: { slug: string }) {
   useEffect(() => {
     api.current?.setTrails(trails);
   }, [trails]);
+  useEffect(() => {
+    api.current?.setMine(mine);
+  }, [mine, status]);
 
   return (
     <div className="relative h-[72vh] min-h-[420px] overflow-hidden rounded-2xl border border-line bg-[#e7eaed] shadow-card">
@@ -241,6 +262,11 @@ export function MountainViewer({ slug }: { slug: string }) {
           <button type="button" onClick={() => setSpin((v) => !v)} className={GLASS_BTN} aria-pressed={spin}>
             {spin ? <Pause size={13} aria-hidden /> : <RotateCw size={13} aria-hidden />} Spin
           </button>
+          {!!skiedRuns?.length && (
+            <button type="button" onClick={() => setMine((v) => !v)} className={mine ? GLASS_BTN.replace("border-white/10", "border-accent/70").replace("text-ink", "text-accent") : GLASS_BTN} aria-pressed={mine}>
+              <Check size={13} aria-hidden /> My runs
+            </button>
+          )}
           <button type="button" onClick={() => setTrails((v) => !v)} className={GLASS_BTN} aria-pressed={trails}>
             {trails ? "Hide trails" : "Show trails"}
           </button>

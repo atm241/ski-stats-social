@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { userFromRequest } from "@/lib/auth";
 import { ingestFile, type IngestResult } from "@/lib/ingest";
+import { rateLimit } from "@/lib/rateLimit";
 
 const MAX_FILES = 50;
+/** Whole request, checked before anything is read into memory (each file is also capped at 30 MB). */
+const MAX_REQUEST_BYTES = 100 * 1024 * 1024;
 
 export type UploadFileResult = IngestResult;
 
@@ -13,6 +16,10 @@ export type UploadFileResult = IngestResult;
 export async function POST(req: Request) {
   const { user, via } = await userFromRequest(req);
   if (!user) return NextResponse.json({ error: via === "token" ? "That token was revoked or is invalid." : "Sign in first." }, { status: 401 });
+
+  const size = Number(req.headers.get("content-length") ?? 0);
+  if (size > MAX_REQUEST_BYTES) return NextResponse.json({ error: "That upload is too big. Send at most 100 MB at a time." }, { status: 413 });
+  if (!rateLimit(`upload:${user.id}`, 60, 10 * 60_000)) return NextResponse.json({ error: "Too many uploads at once. Try again in a few minutes." }, { status: 429 });
 
   const form = await req.formData();
   const files = form.getAll("files").filter((f): f is File => f instanceof File);

@@ -87,6 +87,9 @@ export interface MountainScene {
   runMeshes: THREE.Mesh[];
   /** same meshes, for toggling trail colours on/off */
   runGroup: THREE.Mesh[];
+  /** light up these runs (by name) in full colour and fade the rest; null goes back to normal.
+   * Returns the world-space bounds of the lit runs, to frame them. */
+  highlightRuns: (names: Set<string> | null) => THREE.Box3 | null;
   runForFace: Map<THREE.Mesh, RunPick[]>;
   stations: THREE.InstancedMesh;
   liftForStation: LiftPick[];
@@ -239,6 +242,44 @@ export function buildMountainScene(data: MountainData): MountainScene {
     runMeshes.push(mesh);
     runForFace.set(mesh, faces);
   }
+
+  // "My runs": skied runs drawn bright and a little wider on top, everything else faded back
+  const highlightMat = track(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, polygonOffset: true, polygonOffsetFactor: -3, side: THREE.DoubleSide }));
+  let highlight: THREE.Mesh | null = null;
+  const highlightRuns = (names: Set<string> | null): THREE.Box3 | null => {
+    if (highlight) {
+      root.remove(highlight);
+      highlight.geometry.dispose();
+      highlight = null;
+    }
+    for (const m of runMeshes) {
+      const mat = m.material as THREE.MeshBasicMaterial;
+      mat.userData.base ??= mat.opacity;
+      mat.opacity = names ? 0.12 : mat.userData.base;
+    }
+    if (!names?.size) return null;
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const col = new THREE.Color();
+    data.runs.forEach((r, i) => {
+      if (!r.name || !names.has(r.name)) return;
+      const p = ribbon(runPaths[i], RUN_WIDTH * 1.2, RUN_LIFT + 0.6);
+      positions.push(...p);
+      col.set(DIFFICULTY[difficultyOf(r.difficulty)].color);
+      for (let k = 0; k < p.length / 3; k++) colors.push(col.r, col.g, col.b);
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    highlight = new THREE.Mesh(geo, highlightMat);
+    highlight.renderOrder = 2;
+    root.add(highlight);
+    if (!positions.length) return null;
+    geo.computeBoundingBox();
+    root.updateMatrixWorld();
+    return geo.boundingBox!.clone().applyMatrix4(root.matrixWorld);
+  };
+  disposables.push({ dispose: () => highlight?.geometry.dispose() });
 
   // --- trees, kept off the runs. With a satellite forest layer the cut runs are already open ground,
   // so the mask only keeps trees off the drawn ribbons (±15 m); a wide margin wiped out real tree
@@ -397,11 +438,12 @@ export function buildMountainScene(data: MountainData): MountainScene {
   if (data.parks?.length) {
     const parkMat = track(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8 }));
     const pieces = { kicker: track(kicker()), box: track(parkBox()), rail: track(parkRail()) };
-    // what's laid down a park line, and how far apart (a jump line needs room to land)
+    // what's laid down a park line, and how far apart: spaced so each hit is its own moment in a replay
+    // (a real park packs them tighter, but back-to-back tricks get tiring to watch)
     const LINES: Record<ParkLine, { cycle: (keyof typeof pieces)[]; gap: number }> = {
-      mixed: { cycle: ["kicker", "box", "kicker", "rail", "kicker", "box"], gap: 42 },
-      jumps: { cycle: ["kicker"], gap: 58 },
-      jibs: { cycle: ["box", "rail", "rail", "box"], gap: 34 },
+      mixed: { cycle: ["kicker", "rail", "box"], gap: 170 },
+      jumps: { cycle: ["kicker"], gap: 230 },
+      jibs: { cycle: ["box", "rail"], gap: 140 },
     };
     const q = new THREE.Quaternion();
     const pitchQ = new THREE.Quaternion();
@@ -620,6 +662,7 @@ export function buildMountainScene(data: MountainData): MountainScene {
     root,
     baseView,
     runGroup: runMeshes,
+    highlightRuns,
     runMeshes,
     runForFace,
     stations,

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pow Pals</string>
+	<string>Gapr</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,7 +26,7 @@
 		<true/>
 	</dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Pow Pals reads your skiing and snowboarding workouts and their GPS routes to log your days, vertical and top speed. Nothing else from Health is read.</string>
+	<string>Gapr reads your skiing and snowboarding workouts and their GPS routes to log your days, vertical and top speed. Nothing else from Health is read.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

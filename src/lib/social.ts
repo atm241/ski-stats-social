@@ -1,8 +1,8 @@
 import "server-only";
 import type { SkiDay, User } from "@prisma/client";
-import type { Segment } from "./analysis/types";
-import type { StoredTrack } from "./analysis/process";
+import { dayDetail } from "./days";
 import { prisma } from "./db";
+import { type Together, togetherness } from "./together";
 
 /** Ids of the people `userId` follows. */
 export async function followingIds(userId: string): Promise<string[]> {
@@ -18,51 +18,34 @@ export async function followCounts(userId: string) {
   return { followers, following };
 }
 
-const SAME_CHAIR_MS = 2 * 60_000;
-const SAME_SPOT_M = 120;
+/** Ids of people who follow `userId` and whom `userId` follows back. */
+export async function friendIds(userId: string): Promise<string[]> {
+  const [out, inc] = await Promise.all([
+    prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+    prisma.follow.findMany({ where: { followingId: userId }, select: { followerId: true } }),
+  ]);
+  const back = new Set(inc.map((f) => f.followerId));
+  return out.map((f) => f.followingId).filter((id) => back.has(id));
+}
+
+export type Companion = { user: User; day: SkiDay } & Together;
 
 /**
- * Who skied with you: other people's days at the same resort on the same date where at least one
- * lift ride starts within 2 minutes and 120 m of yours (you were on the same lift together).
+ * Friends who skied with you: their day at the same resort on the same date, with the lifts and runs
+ * you shared (see together.ts). Only mutual follows are shown, so a stranger on the next chair is
+ * never revealed on your day, and you never show up on theirs.
  */
-export async function skiedWith(day: SkiDay & { user: User }): Promise<{ user: User; day: SkiDay; sharedLifts: number }[]> {
+export async function skiedWith(day: SkiDay & { user: User }): Promise<Companion[]> {
   if (!day.resortName) return [];
+  const friends = await friendIds(day.userId);
+  if (!friends.length) return [];
   const others = await prisma.skiDay.findMany({
-    where: { localDate: day.localDate, resortName: day.resortName, NOT: { userId: day.userId } },
+    where: { localDate: day.localDate, resortName: day.resortName, userId: { in: friends } },
     include: { user: true },
   });
-  if (!others.length) return [];
-  const mine = liftStarts(day);
+  const mine = dayDetail(day);
   return others
-    .map((o) => {
-      const theirs = liftStarts(o);
-      const sharedLifts = mine.filter((a) => theirs.some((b) => Math.abs(a.t - b.t) < SAME_CHAIR_MS && metres(a, b) < SAME_SPOT_M)).length;
-      return { user: o.user, day: o as SkiDay, sharedLifts };
-    })
-    .filter((c) => c.sharedLifts > 0)
-    .sort((a, b) => b.sharedLifts - a.sharedLifts);
-}
-
-/** Start time and position of each lift ride in a stored day. */
-function liftStarts(day: SkiDay) {
-  const segs = JSON.parse(day.segments) as Segment[];
-  const track = JSON.parse(day.track) as StoredTrack;
-  return segs
-    .filter((s) => s.kind === "lift")
-    .map((s) => {
-      // nearest stored point to the lift start
-      let best = track.pts[0];
-      for (const p of track.pts) {
-        if (track.t0 + p[0] * 1000 >= s.startT) {
-          best = p;
-          break;
-        }
-      }
-      return { t: s.startT, lat: best[1], lon: best[2] };
-    });
-}
-
-function metres(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const kx = 111_320 * Math.cos((a.lat * Math.PI) / 180);
-  return Math.hypot((a.lon - b.lon) * kx, (a.lat - b.lat) * 110_950);
+    .map((o) => ({ user: o.user, day: o as SkiDay, ...togetherness(mine, dayDetail(o).track) }))
+    .filter((c) => c.lifts + c.runs > 0)
+    .sort((a, b) => b.sharedS - a.sharedS);
 }

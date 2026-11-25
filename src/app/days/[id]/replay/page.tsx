@@ -6,6 +6,15 @@ import { prisma } from "@/lib/db";
 import { dayDetail } from "@/lib/days";
 import { feet, prettyDate } from "@/lib/format";
 import { mountainSlugForResort } from "@/lib/mountain/registry";
+import { skiedWith } from "@/lib/social";
+
+/** "Dana · Alta Ski Area, Feb 15" */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const day = await prisma.skiDay.findUnique({ where: { id }, select: { resortName: true, localDate: true, user: { select: { displayName: true } } } });
+  if (!day) return { title: "Not found" };
+  return { title: `Replay: ${day.user.displayName} · ${day.resortName ?? "Backcountry"}, ${prettyDate(day.localDate, { month: "short", day: "numeric" })}` };
+}
 
 export default async function ReplayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +22,8 @@ export default async function ReplayPage({ params }: { params: Promise<{ id: str
   if (!day) notFound();
   const slug = await mountainSlugForResort(day.resortName);
   const { track, segments } = dayDetail(day);
+  // friends who skied with them ride along in the replay
+  const companions = slug ? await skiedWith(day) : [];
   const title = `${day.user.displayName} · ${day.resortName} · ${prettyDate(day.localDate, { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
@@ -26,6 +37,11 @@ export default async function ReplayPage({ params }: { params: Promise<{ id: str
           <p className="num mt-1 text-sm text-ink-soft">
             {title} · {feet(day.verticalM)} ft over {day.runCount} runs
           </p>
+          {companions.length > 0 && (
+            <p className="mt-1 text-sm text-ink-soft">
+              Skiing with {companions.map((c) => `${c.user.displayName} (${c.runs} ${c.runs === 1 ? "run" : "runs"} together)`).join(", ")}
+            </p>
+          )}
         </div>
       </div>
       {slug ? (
@@ -35,6 +51,7 @@ export default async function ReplayPage({ params }: { params: Promise<{ id: str
           segments={segments}
           timeZone={day.timezone}
           rider={{ avatar: day.user.avatar, displayName: day.user.displayName }}
+          companions={companions.map((c) => ({ ...dayDetail(c.day), rider: { avatar: c.user.avatar, displayName: c.user.displayName } }))}
           title={title}
         />
       ) : (

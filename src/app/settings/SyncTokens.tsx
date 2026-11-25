@@ -10,7 +10,7 @@ export function SyncTokens({ tokens }: { tokens: { id: string; name: string; cre
   return (
     <div className="card space-y-4 p-5 text-sm">
       <p className="text-ink-soft">
-        The Pow Pals iPhone app uploads your Apple Watch ski &amp; snowboard workouts automatically. Create a token here and paste it into the app (it&apos;s shown once).
+        The Gapr iPhone app uploads your Apple Watch ski &amp; snowboard workouts automatically. Create a token here and paste it into the app (it&apos;s shown once).
       </p>
       {state.secret ? (
         <div className="space-y-2 rounded-lg border border-good/30 bg-good/10 p-3">

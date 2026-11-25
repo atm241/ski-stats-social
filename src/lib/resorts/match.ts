@@ -11,10 +11,6 @@ function resorts(): Resort[] {
   return cache;
 }
 
-export function resortById(id: string): Resort | undefined {
-  return resorts().find((r) => r.id === id);
-}
-
 /** The resort containing this point, or the nearest point-only resort within 1.5 km. */
 export function resortAt(lat: number, lon: number): Resort | null {
   let nearest: Resort | null = null;

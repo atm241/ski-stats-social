@@ -21,9 +21,20 @@ const MIN_SHARE = 0.12;
  * Names each run and lift ride by voting along its GPS points: each point picks the nearest named
  * trail/lift within 60 m. Segments with no nearby named feature get null.
  */
+/** Terrain and trail lookup per mountain, built once per loaded mountain file (rebuilt files are new objects). */
+const indexes = new WeakMap<MountainData, { terrain: ReturnType<typeof createTerrain>; names: ReturnType<typeof nameIndex> }>();
+function indexFor(data: MountainData) {
+  let hit = indexes.get(data);
+  if (!hit) {
+    const terrain = createTerrain(data);
+    hit = { terrain, names: nameIndex(data, terrain) };
+    indexes.set(data, hit);
+  }
+  return hit;
+}
+
 export function labelSegments(track: StoredTrack, segments: Segment[], data: MountainData): (SegmentLabel | null)[] {
-  const terrain = createTerrain(data);
-  const names = nameIndex(data, terrain);
+  const { terrain, names } = indexFor(data);
   const pts = track.pts.map(([dt, lat, lon]) => ({ t: track.t0 + dt * 1000, xz: terrain.toXZ(lon, lat) }));
   let cursor = 0;
   return segments.map((s) => {

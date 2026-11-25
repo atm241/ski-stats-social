@@ -6,10 +6,8 @@ const MPH_PER_MPS = 2.23694;
 
 const int = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const one = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
 export const feet = (m: number) => int.format(m * FT_PER_M);
-export const feetCompact = (m: number) => compact.format(m * FT_PER_M);
 export const miles = (m: number) => one.format(m * MI_PER_M);
 export const mph = (mps: number) => int.format(mps * MPH_PER_MPS);
 export const toFeet = (m: number) => m * FT_PER_M;

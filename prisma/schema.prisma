@@ -21,6 +21,8 @@ model User {
   avatar      String
   /// Avatar background, one of the palette keys in src/lib/avatars.ts.
   color       String
+  /// Opted in to the public "Everyone" leaderboard. Off by default: friends see your stats either way.
+  globalBoard Boolean  @default(false)
   createdAt   DateTime @default(now())
   days        SkiDay[]
   sessions    Session[]

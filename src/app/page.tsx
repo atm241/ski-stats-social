@@ -19,7 +19,7 @@ export default async function Home() {
   const friends = me ? await followingIds(me.id) : [];
   const feedUsers = me && friends.length ? [me.id, ...friends] : null;
   const [board, feed, myDays] = await Promise.all([
-    leaderboard(season, "vertical"),
+    leaderboard(season, "vertical", "public"),
     prisma.skiDay.findMany({
       where: feedUsers ? { userId: { in: feedUsers } } : undefined,
       orderBy: [{ localDate: "desc" }, { startedAt: "desc" }],

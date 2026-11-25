@@ -16,6 +16,14 @@ import { labelSegments } from "@/lib/trails";
 
 const KIND_LABEL: Record<string, string> = { resort: "Resort", backcountry: "Backcountry", mixed: "Resort + uphill" };
 
+/** "Dana · Alta Ski Area, Feb 15" */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const day = await prisma.skiDay.findUnique({ where: { id }, select: { resortName: true, localDate: true, user: { select: { displayName: true } } } });
+  if (!day) return { title: "Not found" };
+  return { title: `${day.user.displayName} · ${day.resortName ?? "Backcountry"}, ${prettyDate(day.localDate, { month: "short", day: "numeric" })}` };
+}
+
 export default async function DayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const [day, me] = await Promise.all([prisma.skiDay.findUnique({ where: { id }, include: { user: true } }), currentUser()]);
@@ -157,7 +165,17 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
 
       {companions.length > 0 && (
         <section className="card p-5">
-          <SectionTitle>Skied with</SectionTitle>
+          <SectionTitle
+            right={
+              slug ? (
+                <Link href={`/days/${day.id}/replay`} className="text-accent hover:text-accent-strong">
+                  Watch together in 3D
+                </Link>
+              ) : undefined
+            }
+          >
+            Skied with
+          </SectionTitle>
           <ul className="flex flex-wrap gap-3">
             {companions.map((c) => (
               <li key={c.day.id}>
@@ -166,7 +184,7 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
                   <div className="text-sm">
                     <div className="font-medium">{c.user.displayName}</div>
                     <div className="num text-xs text-ink-soft">
-                      {c.sharedLifts} shared {c.sharedLifts === 1 ? "lift" : "lifts"} · {feet(c.day.verticalM)} ft
+                      {[c.runs && `${c.runs} ${c.runs === 1 ? "run" : "runs"}`, c.lifts && `${c.lifts} ${c.lifts === 1 ? "lift" : "lifts"}`].filter(Boolean).join(" · ")} together
                     </div>
                   </div>
                 </Link>

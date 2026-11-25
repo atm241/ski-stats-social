@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Pow Pals web API: token check and GPX upload (multipart, Bearer token).
+/// The Gapr web API: token check and GPX upload (multipart, Bearer token).
 struct API {
     var baseURL: URL
     var token: String

@@ -2,6 +2,8 @@ import { Armchair } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
+import { CompletionCard } from "@/components/Completion";
+import { runCatalog } from "@/lib/completion";
 import { DayCard } from "@/components/DayCard";
 import { MountainViewer } from "@/components/MountainViewer";
 import { Difficulty, SectionTitle } from "@/components/ui";
@@ -10,7 +12,15 @@ import { totals } from "@/lib/days";
 import { feet } from "@/lib/format";
 import { listMountains, loadMountain } from "@/lib/mountain/registry";
 import { currentSeasonKey, seasonLabel } from "@/lib/season";
-import { trailStats } from "@/lib/stats";
+import { currentUser } from "@/lib/auth";
+import { friendIds } from "@/lib/social";
+import { mountainCompletions, trailStats } from "@/lib/stats";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const m = (await listMountains()).find((x) => x.slug === slug);
+  return { title: m?.name ?? "Not found" };
+}
 
 export default async function MountainPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -36,19 +46,67 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
   const board = [...byUser.values()].map((u) => ({ user: u.user, ...totals(u.days) })).sort((a, b) => b.verticalM - a.verticalM);
   const trails = seasonDays.length ? await trailStats(seasonDays) : null;
 
+  // "Ski every run": your progress here (all seasons), and your friends' for comparison
+  const me = await currentUser();
+  const crew = me ? [me.id, ...(await friendIds(me.id))] : [];
+  const progress = (
+    await Promise.all(
+      crew.map(async (id) => {
+        const mine = days.filter((d) => d.userId === id);
+        const c = mine.length ? (await mountainCompletions(mine))[0] : undefined;
+        return c ? { user: mine[0].user, c } : null;
+      }),
+    )
+  ).filter((x) => x !== null);
+  const myProgress = progress.find((p) => p.user.id === me?.id)?.c;
+  const friendsProgress = progress.filter((p) => p.user.id !== me?.id).sort((a, b) => b.c.skied - a.c.skied);
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">{data.name}</h1>
         <p className="num mt-1 text-sm text-ink-soft">
-          {data.runs.length} runs · {data.lifts.length} lifts · ~{vert.toLocaleString()} ft of relief
+          {runCatalog(data).size} named runs · {data.lifts.filter((l) => l.name).length} lifts · ~{vert.toLocaleString()} ft of relief
           {resorts.length > 1 && ` · ${resorts.join(" + ")}`}
         </p>
       </div>
       <div className="space-y-2">
-        <MountainViewer slug={slug} />
+        <MountainViewer slug={slug} skiedRuns={myProgress?.skiedNames} />
         <p className="text-xs text-ink-faint">{data.attribution} Terrain height exaggerated 1.25× for the low-poly look.</p>
       </div>
+
+      {myProgress && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <section>
+            <SectionTitle right="all seasons">Your runs here</SectionTitle>
+            <CompletionCard c={myProgress} />
+          </section>
+          {friendsProgress.length > 0 && (
+            <section className="lg:col-span-2">
+              <SectionTitle>Friends&apos; progress</SectionTitle>
+              <ol className="card divide-y divide-line overflow-hidden">
+                {[{ user: me!, c: myProgress }, ...friendsProgress]
+                  .sort((a, b) => b.c.skied - a.c.skied)
+                  .map((p) => (
+                    <li key={p.user.id}>
+                      <Link href={`/u/${p.user.username}`} className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-raised">
+                        <Avatar user={p.user} size={26} />
+                        <span className="min-w-0 flex-1 truncate">{p.user.id === me?.id ? "You" : p.user.displayName}</span>
+                        <span className="h-1.5 w-32 overflow-hidden rounded-full bg-hover" aria-hidden>
+                          <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round((p.c.skied / p.c.total) * 100)}%` }} />
+                        </span>
+                        <span className="num w-24 text-right">
+                          {p.c.skied}
+                          <span className="text-ink-faint"> / {p.c.total}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+              </ol>
+            </section>
+          )}
+        </div>
+      )}
 
       {season && (
         <div className="grid gap-6 lg:grid-cols-3">

@@ -6,13 +6,13 @@ import { Avatar } from "@/components/Avatar";
 import { Logo } from "@/components/Art";
 import { NavLink } from "@/components/NavLink";
 import { currentUser } from "@/lib/auth";
-import { APP_NAME, TAGLINE } from "@/lib/brand";
+import { APP_NAME, APP_SHORT_NAME, TAGLINE } from "@/lib/brand";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-export const metadata: Metadata = { title: APP_NAME, description: TAGLINE };
+export const metadata: Metadata = { title: { default: APP_NAME, template: `%s · ${APP_NAME}` }, description: TAGLINE };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const user = await currentUser();
@@ -23,7 +23,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
             <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
               <Logo className="h-7 w-7" />
-              <span className="hidden sm:inline">{APP_NAME}</span>
+              <span className="hidden sm:inline" title={APP_NAME}>
+                {APP_SHORT_NAME}
+              </span>
             </Link>
             <nav className="flex items-center gap-0.5 text-[13px] sm:text-sm">
               {user && (
