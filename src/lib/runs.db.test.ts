@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { completion, runCatalog } from "./completion";
 import { prisma } from "./db";
-import { leaderboard, saveDay } from "./days";
+import { deleteSkiDay, leaderboard, rebuildSeasonTotals, refreshSeasonTotal, saveDay } from "./days";
 import { reindexDays, setRunLike, trailBoards } from "./runs";
 import { mountainCompletions, trailStats } from "./stats";
 import { makeUser, parkCityData, parkCityDay, resetDb, saveParkCityDay } from "./test/db";
@@ -104,7 +104,44 @@ describe("season leaderboard", () => {
     const [pub, priv] = [await makeUser("pub", { globalBoard: true }), await makeUser("priv")];
     const day = await saveParkCityDay(pub.id);
     await saveParkCityDay(priv.id);
-    expect((await leaderboard(day.seasonKey, "vertical", "public")).map((r) => r.user.username)).toEqual(["pub"]);
-    expect((await leaderboard(day.seasonKey, "vertical", [pub.id, priv.id])).map((r) => r.rank)).toEqual([1, 1]); // same day, a tie
+    expect((await leaderboard(day.seasonKey, "vertical", "public")).rows.map((r) => r.user.username)).toEqual(["pub"]);
+    expect((await leaderboard(day.seasonKey, "vertical", [pub.id, priv.id])).rows.map((r) => r.rank)).toEqual([1, 1]); // same day, a tie
+  });
+
+  it("ranks the top rows, counts everyone, and finds your rank below the cut", async () => {
+    const users = [];
+    for (const [i, name] of ["a", "b", "c", "d"].entries()) {
+      const u = await makeUser(name, { globalBoard: true });
+      users.push(u);
+      for (let k = 0; k <= i; k++) await saveParkCityDay(u.id, `2026-03-${String(10 + k).padStart(2, "0")}T16:00:00Z`, 5 + k);
+    }
+    const season = (await prisma.skiDay.findFirstOrThrow()).seasonKey;
+    const board = await leaderboard(season, "days", "public", { limit: 2, me: users[0].id });
+    expect(board.rows.map((r) => [r.user.username, r.days, r.rank])).toEqual([["d", 4, 1], ["c", 3, 2]]);
+    expect(board.total).toBe(4);
+    expect(board.mine).toMatchObject({ rank: 4, days: 1 });
+  });
+
+  it("stays current as days are deleted or flagged", async () => {
+    const u = await makeUser("pat", { globalBoard: true });
+    const first = await saveParkCityDay(u.id, "2026-03-13T16:00:00Z", 5);
+    const second = await saveParkCityDay(u.id, "2026-03-14T16:00:00Z", 9);
+    const board = () => leaderboard(first.seasonKey, "days", "public", { me: u.id });
+    expect((await board()).mine?.days).toBe(2);
+    await deleteSkiDay(second);
+    expect((await board()).mine?.days).toBe(1);
+    await prisma.skiDay.update({ where: { id: first.id }, data: { flagged: true } });
+    await refreshSeasonTotal(u.id, first.seasonKey);
+    expect((await board()).mine).toBeNull();
+    expect(await prisma.seasonTotal.count()).toBe(0);
+  });
+
+  it("rebuilding gives the same totals as keeping them up to date", async () => {
+    const u = await makeUser();
+    const day = await saveParkCityDay(u.id);
+    const before = await prisma.seasonTotal.findUniqueOrThrow({ where: { userId_seasonKey: { userId: u.id, seasonKey: day.seasonKey } } });
+    expect(await rebuildSeasonTotals()).toBe(1);
+    const after = await prisma.seasonTotal.findUniqueOrThrow({ where: { userId_seasonKey: { userId: u.id, seasonKey: day.seasonKey } } });
+    expect({ ...after, updatedAt: null }).toEqual({ ...before, updatedAt: null });
   });
 });

@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { HealthAutoSync } from "@/components/HealthSync";
 import { AuthProvider } from "@/lib/auth";
 import { C } from "@/lib/theme";
 
@@ -7,6 +8,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <StatusBar style="light" />
+      <HealthAutoSync />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: C.bg },

@@ -23,7 +23,8 @@
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "resorts:build": "tsx scripts/build-resorts.ts",
     "runs:reindex": "tsx --conditions=react-server scripts/reindex-runs.ts",
-    "mountains:index": "tsx scripts/mountains-index.ts"
+    "mountains:index": "tsx scripts/mountains-index.ts",
+    "totals:rebuild": "tsx --conditions=react-server scripts/rebuild-season-totals.ts"
   },
   "dependencies": {
     "@photostructure/tz-lookup": "^11.7.0",

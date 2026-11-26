@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import type { ApiLeaderboard } from "@shared/apiTypes";
+import type { ApiLeaderboard, ApiLeaderboardRow } from "@shared/apiTypes";
 import { feet } from "@shared/format";
 import { Avatar, Loading, s } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
@@ -15,7 +15,7 @@ const METRICS = [
   { key: "bestday", label: "Best day" },
   { key: "uphill", label: "Uphill" },
 ] as const;
-type Row = ApiLeaderboard["rows"][number];
+type Row = ApiLeaderboardRow;
 const VALUE: Record<string, (r: Row) => string> = {
   vertical: (r) => `${feet(r.verticalM)} ft`,
   days: (r) => `${r.days} days`,
@@ -59,20 +59,32 @@ export default function LeaderboardScreen() {
           data={data.rows}
           keyExtractor={(r) => r.user.username}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} tintColor={C.accent} />}
-          renderItem={({ item }) => (
-            <Pressable onPress={() => router.push({ pathname: "/u/[username]", params: { username: item.user.username } })} style={({ pressed }) => [s.row, pressed && { backgroundColor: C.raised }]}>
-                <Text style={{ width: 24, textAlign: "right", color: item.rank <= 3 ? C.accent : C.inkFaint, fontVariant: ["tabular-nums"] }}>{item.rank}</Text>
-                <Avatar user={item.user} size={32} />
-                <Text style={[s.title, { flex: 1 }]} numberOfLines={1}>
-                  {item.user.displayName}
-                  {item.user.username === me?.username ? "  (you)" : ""}
-                </Text>
-                <Text style={[s.vert, { color: C.ink }]}>{VALUE[metric](item)}</Text>
-            </Pressable>
-          )}
+          renderItem={({ item }) => <BoardRow row={item} metric={metric} isMe={item.user.username === me?.username} />}
+          ListFooterComponent={
+            data.mine && !data.rows.some((r) => r.user.username === data.mine!.user.username) ? (
+              <>
+                <Text style={{ color: C.inkFaint, textAlign: "center", paddingVertical: 4 }}>···</Text>
+                <BoardRow row={data.mine} metric={metric} isMe />
+              </>
+            ) : undefined
+          }
           ListEmptyComponent={<Text style={{ color: C.inkSoft, padding: 16 }}>{scope === "friends" ? "No friends here yet. Friends are people you follow who follow you back." : "Nobody on the board this season yet."}</Text>}
         />
       )}
     </View>
+  );
+}
+
+function BoardRow({ row, metric, isMe }: { row: Row; metric: string; isMe: boolean }) {
+  return (
+    <Pressable onPress={() => router.push({ pathname: "/u/[username]", params: { username: row.user.username } })} style={({ pressed }) => [s.row, (pressed || isMe) && { backgroundColor: C.raised }]}>
+      <Text style={{ width: 28, textAlign: "right", color: row.rank <= 3 ? C.accent : C.inkFaint, fontVariant: ["tabular-nums"] }}>{row.rank}</Text>
+      <Avatar user={row.user} size={32} />
+      <Text style={[s.title, { flex: 1 }]} numberOfLines={1}>
+        {row.user.displayName}
+        {isMe ? "  (you)" : ""}
+      </Text>
+      <Text style={[s.vert, { color: C.ink }]}>{VALUE[metric](row)}</Text>
+    </Pressable>
   );
 }

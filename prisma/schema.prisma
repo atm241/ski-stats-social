@@ -36,6 +36,7 @@ model User {
   runs        Run[]
   liftRides   LiftRide[]
   runLikes    RunLike[]
+  seasons     SeasonTotal[]
 }
 
 /// Personal access token for the iPhone sync app (Bearer auth on /api/uploads). Only the hash is stored.
@@ -256,4 +257,28 @@ model RateLimit {
   key         String   @id
   windowStart DateTime
   count       Int
+}
+
+/// One skier's totals for a season, kept up to date as days are saved and deleted, so leaderboards are
+/// a sorted query rather than adding up every day. Flagged days don't count. Rebuild: `npm run totals:rebuild`.
+model SeasonTotal {
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seasonKey       String
+  verticalM       Float
+  uphillM         Float
+  days            Int
+  resorts         Int
+  backcountryDays Int
+  bestDayM        Float
+  distanceM       Float
+  skiTimeS        Float
+  updatedAt       DateTime @updatedAt
+
+  @@id([userId, seasonKey])
+  @@index([seasonKey, verticalM])
+  @@index([seasonKey, days])
+  @@index([seasonKey, resorts])
+  @@index([seasonKey, bestDayM])
+  @@index([seasonKey, uphillM])
 }

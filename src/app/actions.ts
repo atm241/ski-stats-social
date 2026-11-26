@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { createApiToken, createSession, currentUser, destroySession, SESSION_COOKIE } from "@/lib/auth";
 import { AVATAR_COLORS, AVATAR_EMOJI } from "@/lib/avatars";
 import { prisma } from "@/lib/db";
+import { deleteSkiDay } from "@/lib/days";
 import { normalizeEmail, redeemLoginLink, requestLoginLink } from "@/lib/magicLink";
 import { deleteUserAccount } from "@/lib/account";
 import { addComment, deleteComment } from "@/lib/comments";
@@ -88,7 +89,7 @@ export async function deleteDay(dayId: string) {
   const me = await currentUser();
   const day = await prisma.skiDay.findUnique({ where: { id: dayId }, include: { user: true } });
   if (!me || !day || day.userId !== me.id) return;
-  await prisma.skiDay.delete({ where: { id: dayId } });
+  await deleteSkiDay(day);
   redirect(`/u/${day.user.username}`);
 }
 
@@ -109,7 +110,7 @@ export async function setFollow(username: string, follow: boolean) {
 
 export type TokenState = { secret?: string; error?: string };
 
-/** Creates an API token for the iPhone sync app; the secret is returned once to show the user. */
+/** Creates a personal API token (for scripts); the secret is returned once to show the user. */
 export async function createSyncToken(_: TokenState, form: FormData): Promise<TokenState> {
   const me = await currentUser();
   if (!me) redirect("/login");

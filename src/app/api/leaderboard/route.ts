@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiUser, caller } from "@/lib/api";
 import type { ApiLeaderboard } from "@/lib/apiTypes";
-import { leaderboard, METRICS, type Metric, seasonsWithData } from "@/lib/days";
+import { leaderboard, type LeaderboardRow, METRICS, type Metric, seasonsWithData } from "@/lib/days";
 import { currentSeasonKey } from "@/lib/season";
 import { friendIds } from "@/lib/social";
 
@@ -14,13 +14,16 @@ export async function GET(req: Request) {
   const season = wanted && seasons.includes(wanted) ? wanted : seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
   const metric: Metric = METRICS.includes(q.get("metric") as Metric) ? (q.get("metric") as Metric) : "vertical";
   const scope = q.get("scope") === "friends" && me ? "friends" : "public";
-  const rows = await leaderboard(season, metric, scope === "friends" ? [me!.id, ...(await friendIds(me!.id))] : "public");
+  const board = await leaderboard(season, metric, scope === "friends" ? [me!.id, ...(await friendIds(me!.id))] : "public", { me: me?.id });
+  const row = (r: LeaderboardRow) => ({ rank: r.rank, user: apiUser(r.user), verticalM: r.verticalM, days: r.days, resorts: r.resorts, bestDayM: r.bestDayM, uphillM: r.uphillM });
   const body: ApiLeaderboard = {
     season,
     seasons,
     metric,
     scope,
-    rows: rows.map((r) => ({ rank: r.rank, user: apiUser(r.user), verticalM: r.verticalM, days: r.days, resorts: r.resorts, bestDayM: r.bestDayM, uphillM: r.uphillM })),
+    rows: board.rows.map(row),
+    total: board.total,
+    mine: board.mine ? row(board.mine) : null,
   };
   return NextResponse.json(body);
 }

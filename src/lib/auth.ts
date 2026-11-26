@@ -47,14 +47,14 @@ export async function destroySession() {
 /** API tokens look like "pp_<43 chars>" so they're recognisable if pasted somewhere they shouldn't be. */
 export const API_TOKEN_PREFIX = "pp_";
 
-/** Creates a personal API token for the sync app; returns the secret once (only its hash is stored). */
+/** Creates a personal API token (phone app sign-in, or scripts); returns the secret once (only its hash is stored). */
 export async function createApiToken(userId: string, name: string) {
   const secret = API_TOKEN_PREFIX + newToken();
   await prisma.apiToken.create({ data: { userId, name: name.slice(0, 60) || "iPhone", tokenHash: hashToken(secret) } });
   return secret;
 }
 
-/** The user behind a request: a "Bearer pp_…" API token (sync app) or, failing that, the session cookie. */
+/** The user behind a request: a "Bearer pp_…" API token (phone app, scripts) or, failing that, the session cookie. */
 export async function userFromRequest(req: Request): Promise<{ user: Awaited<ReturnType<typeof currentUser>>; via: "token" | "session" }> {
   const auth = req.headers.get("authorization");
   if (auth?.startsWith(`Bearer ${API_TOKEN_PREFIX}`)) {

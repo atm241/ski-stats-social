@@ -89,7 +89,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </section>
 
       <section>
-        <SectionTitle>iPhone sync</SectionTitle>
+        <SectionTitle>Phone app</SectionTitle>
         <SyncTokens tokens={tokens.map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt.toISOString(), lastUsedAt: t.lastUsedAt?.toISOString() ?? null }))} />
       </section>
 

@@ -50,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [load],
   );
   const signOut = useCallback(async () => {
+    const t = await tokenStore.get();
+    if (t) await api("/api/auth/sign-out", { method: "POST", token: t }).catch(() => {}); // revoke it server-side too
     await tokenStore.clear();
     await load(null);
   }, [load]);

@@ -36,7 +36,22 @@ export interface ApiLeaderboard {
   seasons: string[];
   metric: string;
   scope: "public" | "friends";
-  rows: { rank: number; user: ApiUser; verticalM: number; days: number; resorts: number; bestDayM: number; uphillM: number }[];
+  /** the top of the board, best first */
+  rows: ApiLeaderboardRow[];
+  /** everyone on this board */
+  total: number;
+  /** the caller's row, even when it's below the top rows */
+  mine: ApiLeaderboardRow | null;
+}
+
+export interface ApiLeaderboardRow {
+  rank: number;
+  user: ApiUser;
+  verticalM: number;
+  days: number;
+  resorts: number;
+  bestDayM: number;
+  uphillM: number;
 }
 
 export interface ApiProfile {
@@ -102,4 +117,16 @@ export interface ApiPeople {
   suggestions: (ApiUser & { following: boolean; reason: string })[];
   /** your invite link, when signed in */
   inviteUrl: string | null;
+}
+
+/** POST /api/uploads: one entry per file sent. */
+export interface ApiUploadFile {
+  fileName: string;
+  saved: { id: string; localDate: string; resortName: string | null; verticalM: number; flagged: boolean }[];
+  notes: string[];
+  error?: string;
+}
+
+export interface ApiUploadResponse {
+  results: ApiUploadFile[];
 }

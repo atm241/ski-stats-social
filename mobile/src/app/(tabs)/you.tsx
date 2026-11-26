@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, Platform, Text, TextInput, View } from "react-native";
+import { HealthSection } from "@/components/HealthSync";
 import { ProfileView } from "@/components/Profile";
 import { Button, Loading, s, Section } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -18,7 +19,17 @@ export default function YouScreen() {
         <Button title="Sign in" onPress={() => router.push("/sign-in")} />
       </View>
     );
-  return <ProfileView username={me.username} footer={<AccountActions username={me.username} />} />;
+  return (
+    <ProfileView
+      username={me.username}
+      footer={
+        <>
+          <HealthSection />
+          <AccountActions username={me.username} />
+        </>
+      }
+    />
+  );
 }
 
 function AccountActions({ username }: { username: string }) {

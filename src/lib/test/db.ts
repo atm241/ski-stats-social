@@ -1,11 +1,8 @@
-import { readFileSync } from "node:fs";
-import { processGpx } from "../analysis/process";
 import { prisma } from "../db";
 import { saveDay } from "../days";
-import type { MountainData } from "../mountain/types";
-import { toGpx } from "../sample/generate";
-import { plannedDay } from "../sample/plannedDay";
-import { PLANS } from "../sample/plans";
+import { parkCityDay } from "./fixtures";
+
+export { parkCityData, parkCityDay } from "./fixtures";
 
 /** Helpers for the database tests (*.db.test.ts). */
 
@@ -20,15 +17,6 @@ export async function resetDb() {
 let n = 0;
 export function makeUser(username = `skier${++n}`, extra: { email?: string; globalBoard?: boolean } = {}) {
   return prisma.user.create({ data: { username, displayName: username[0].toUpperCase() + username.slice(1), avatar: "", color: "#38bdf8", ...extra } });
-}
-
-const plan = PLANS["park-city-jupiter-to-canyons"];
-let parkCity: MountainData | undefined;
-export const parkCityData = () => (parkCity ??= JSON.parse(readFileSync(`public/mountains/${plan.mountain}.json`, "utf8")) as MountainData);
-
-/** A realistic Park City day (named runs incl. McConkey's Bowl), processed like a real upload. */
-export function parkCityDay(start = "2026-03-13T16:00:00Z", seed = 5) {
-  return processGpx(toGpx(plannedDay(parkCityData(), { start: new Date(start), seed, plan: plan.plan, endAt: plan.endAt }).points)).days[0];
 }
 
 export async function saveParkCityDay(userId: string, start?: string, seed?: number) {

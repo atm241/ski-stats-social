@@ -26,6 +26,7 @@ In development, `/login` has one-click sign-in buttons for the demo skiers.
 | `npm run db:reset` | wipe the dev database, re-apply migrations, reseed |
 | `npm run runs:reindex [-- <slug>]` | re-label saved days after rebuilding a mountain (see "Run index") |
 | `npm run mountains:index` | rewrite `public/mountains/index.json` |
+| `npm run totals:rebuild` | recompute stored season totals (leaderboards) |
 
 `samples/` has GPX files to try in the uploader (`npx tsx scripts/make-samples.ts` regenerates them).
 
@@ -35,13 +36,13 @@ In development, `/login` has one-click sign-in buttons for the demo skiers.
 - `src/lib`: everything else. Pure logic (analysis, trails, completion, togetherness, 3D scene) is unit tested; server modules (`server-only`) talk to the database.
 - `src/lib/views.ts`: what the day, profile and feed screens show. **Web pages and API routes both read from here**, so the web and phone apps can't drift apart; each only decides presentation.
 - `src/lib/apiTypes.ts`: the API's response types, imported by the phone app as `@shared/apiTypes`.
-- `mobile/`: the Expo app (see its own instructions in `mobile/AGENTS.md`).
+- `mobile/`: the Expo app (see `mobile/AGENTS.md`). Apple Health needs a development build, not Expo Go: `cd mobile && npx expo run:ios` (simulator; needs CocoaPods) or `eas build --profile development`. Dev builds have a button that writes a test ski day into Health.
 - `scripts/`: mountain builders and one-off maintenance.
 - `e2e/`: Playwright tests.
 
 ## How it works
 
-- **Data in:** GPX upload (`/upload` → `POST /api/uploads`), email-to-upload, the Apple Health export, or the iPhone sync app. Every tracker can export GPX. Neither Epic nor Ikon offers a public API.
+- **Data in:** GPX upload (`/upload` → `POST /api/uploads`), email-to-upload, the Apple Health export, or Apple Health sync in the phone app. Every tracker can export GPX. Neither Epic nor Ikon offers a public API.
 - **We measure, not the source app:** `src/lib/analysis/analyze.ts` smooths altitude, splits the day into up/down legs and classifies lifts, runs, skinning and driving. Vertical = total descent on runs. The same rules apply to everyone, which keeps the leaderboard fair.
 - **Resort detection:** `data/resorts.json` (~4,900 operating downhill areas from OpenSkiMap, built by `scripts/build-resorts.ts`), point-in-polygon with majority vote.
 - **Cheat guards:** car rides are excluded; impossible speeds, lift rates or daily vertical flag a day off the leaderboards. Overlapping uploads are rejected as duplicates.
@@ -57,7 +58,7 @@ GPS tracks are the big columns, and the Prisma client never loads them unless a 
 
 - **Friends** are mutual follows. Invite links (`/invite/<code>`) make two people friends in one tap; `/people` has search and suggestions.
 - **Skied with** (`src/lib/together.ts`): a friend's day at the same resort and date counts when you rode lifts together (within 40 m for most of the ride) or skied runs together (within 90 m for most of the run). Friends only; strangers on the next chair never show up.
-- **Leaderboards:** the public board is opt-in (Settings); the friends board shows you and your friends. Trail boards (`/mountains/<slug>/runs/<trail>`) rank the fastest skiers on that trail and the most-liked runs down it.
+- **Leaderboards:** the public board is opt-in (Settings); the friends board shows you and your friends. Both read `SeasonTotal`, one row per skier and season, refreshed whenever a day is saved or deleted, so a board is one sorted query (top 100, plus your own rank). Trail boards (`/mountains/<slug>/runs/<trail>`) rank the fastest skiers on that trail and the most-liked runs down it.
 - **Comments and likes:** anyone signed in can comment on a day (rate-limited) and like other people's runs.
 
 ### 3D mountains and replays
@@ -76,7 +77,7 @@ GPS tracks are the big columns, and the Prisma client never loads them unless a 
 - **Sign-in:** email magic link (`src/lib/magicLink.ts`). Single-use, 15-minute links, redeemed by a button POST so email scanners can't burn them. Database-backed sessions; only token hashes are stored. Without `RESEND_API_KEY`, emails print to the server console.
 - **Phone app:** signs in with the same email link, which hands it an API token (`gapr://auth?token=pp_…`). The API accepts `Authorization: Bearer pp_…` or the session cookie.
 - **Email-to-upload:** each account gets `<token>@INBOUND_DOMAIN` (in Settings). Postmark's inbound webhook hits `/api/inbound/postmark`; attachments go through the same pipeline as uploads.
-- **Apple Watch / iPhone:** the Health export on `/upload` (read in the browser), or the Swift sync app in `ios/PowPalsSync`, which uploads new ski workouts with a personal token.
+- **Apple Watch / iPhone:** the Health export on `/upload` (read in the browser), or the phone app's Apple Health sync (`mobile/src/lib/health.ts`): ski and snowboard workouts and their GPS routes become GPX (`src/lib/gpx/fromLocations.ts`) and go to `POST /api/uploads` as JSON. New workouts sync through HealthKit background delivery and whenever the app opens; the server skips days it already has.
 - **Account deletion** (Settings, or `DELETE /api/me`) removes everything, including likes and comments on other people's days.
 - **Rate limits** (sign-in emails, uploads, comments) are kept in Postgres, so they hold across server instances.
 

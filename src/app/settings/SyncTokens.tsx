@@ -10,7 +10,7 @@ export function SyncTokens({ tokens }: { tokens: { id: string; name: string; cre
   return (
     <div className="card space-y-4 p-5 text-sm">
       <p className="text-ink-soft">
-        The Gapr iPhone app uploads your Apple Watch ski &amp; snowboard workouts automatically. Create a token here and paste it into the app (it&apos;s shown once).
+        The Gapr app for iPhone signs in with your email and syncs your Apple Watch ski and snowboard workouts on its own. Each signed-in phone is listed here; revoke one to sign it out.
       </p>
       {state.secret ? (
         <div className="space-y-2 rounded-lg border border-good/30 bg-good/10 p-3">
@@ -21,12 +21,18 @@ export function SyncTokens({ tokens }: { tokens: { id: string; name: string; cre
           </div>
         </div>
       ) : (
-        <form action={action} className="flex gap-2">
-          <input name="name" defaultValue="iPhone" maxLength={60} className="input" aria-label="Device name" />
-          <button className="btn-primary shrink-0" disabled={pending}>
-            Create token
-          </button>
-        </form>
+        <details className="text-ink-soft">
+          <summary className="cursor-pointer hover:text-ink">API token for your own scripts</summary>
+          <p className="mt-2 text-xs text-ink-faint">
+            Send it as <code>Authorization: Bearer pp_…</code>, e.g. to <code>POST /api/uploads</code>. It&apos;s shown once.
+          </p>
+          <form action={action} className="mt-2 flex gap-2">
+            <input name="name" defaultValue="Script" maxLength={60} className="input" aria-label="Token name" />
+            <button className="btn-ghost shrink-0" disabled={pending}>
+              Create token
+            </button>
+          </form>
+        </details>
       )}
       {tokens.length > 0 && (
         <ul className="divide-y divide-line rounded-lg border border-line">
@@ -35,7 +41,7 @@ export function SyncTokens({ tokens }: { tokens: { id: string; name: string; cre
               <Smartphone size={14} className="shrink-0 text-ink-faint" aria-hidden />
               <div className="min-w-0 flex-1">
                 <div className="truncate">{t.name}</div>
-                <div className="text-xs text-ink-faint">{t.lastUsedAt ? `Last synced ${new Date(t.lastUsedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "Never used"}</div>
+                <div className="text-xs text-ink-faint">{t.lastUsedAt ? `Last used ${new Date(t.lastUsedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "Never used"}</div>
               </div>
               <form action={revokeSyncToken.bind(null, t.id)}>
                 <button className="text-xs text-ink-faint hover:text-bad">Revoke</button>

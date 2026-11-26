@@ -21,9 +21,11 @@ export function metricValue(row: LeaderboardRow, metric: Metric) {
   return { value: String(row.resorts), unit: row.resorts === 1 ? "resort" : "resorts", raw: row.resorts };
 }
 
-export function LeaderboardList({ rows, metric, meId, limit, compact }: { rows: LeaderboardRow[]; metric: Metric; meId?: string; limit?: number; compact?: boolean }) {
+/** `mine` is the viewer's row, shown after a gap when it's not in the top rows. */
+export function LeaderboardList({ rows, mine, metric, limit, compact }: { rows: LeaderboardRow[]; mine?: LeaderboardRow | null; metric: Metric; limit?: number; compact?: boolean }) {
   const shown = limit ? rows.slice(0, limit) : rows;
-  const me = meId ? rows.find((r) => r.user.id === meId) : undefined;
+  const me = mine ?? undefined;
+  const meId = me?.user.id;
   const max = Math.max(1, ...rows.map((r) => metricValue(r, metric).raw));
 
   if (rows.length === 0) return <p className="card p-6 text-center text-sm text-ink-soft">No days logged this season yet.</p>;
@@ -33,7 +35,7 @@ export function LeaderboardList({ rows, metric, meId, limit, compact }: { rows: 
       {shown.map((r) => (
         <Row key={r.user.id} row={r} metric={metric} max={max} highlight={r.user.id === meId} compact={compact} />
       ))}
-      {me && !shown.includes(me) && (
+      {me && !shown.some((r) => r.user.id === meId) && (
         <>
           <li className="py-1 text-center text-xs text-ink-faint" aria-hidden>
             ···

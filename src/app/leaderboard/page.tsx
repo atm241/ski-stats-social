@@ -13,7 +13,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
   const season = sp.season && seasons.includes(sp.season) ? sp.season : seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
   const metric: Metric = METRICS.includes(sp.metric as Metric) ? (sp.metric as Metric) : "vertical";
   const friends = me && sp.scope === "friends" ? [me.id, ...(await friendIds(me.id))] : undefined; // mutual follows
-  const rows = await leaderboard(season, metric, friends ?? "public");
+  const { rows, mine, total } = await leaderboard(season, metric, friends ?? "public", { me: me?.id });
 
   const href = (o: { s?: string; m?: Metric; scope?: string }) => `/leaderboard?season=${o.s ?? season}&metric=${o.m ?? metric}${(o.scope ?? sp.scope) === "friends" ? "&scope=friends" : ""}`;
   const tab = (active: boolean) => `shrink-0 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${active ? "bg-hover text-ink" : "text-ink-soft hover:text-ink"}`;
@@ -59,7 +59,8 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           if you want to rank against everyone.
         </p>
       )}
-      <LeaderboardList rows={rows} metric={metric} meId={me?.id} />
+      <LeaderboardList rows={rows} mine={mine} metric={metric} />
+      {total > rows.length && <p className="mt-3 text-xs text-ink-faint">Top {rows.length} of {total.toLocaleString()}.</p>}
       {friends && friends.length === 1 && <p className="mt-3 text-sm text-ink-soft">Your friends board shows people you follow who follow you back.</p>}
       <p className="mt-4 text-xs text-ink-faint">Seasons run July–June (southern-hemisphere winters count toward the upcoming season). Flagged days are excluded.</p>
     </div>

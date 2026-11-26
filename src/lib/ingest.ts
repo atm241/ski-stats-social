@@ -4,15 +4,11 @@ import { prisma } from "./db";
 import { saveDay } from "./days";
 import { feet } from "./format";
 import { GpxError } from "./gpx/parse";
+import type { ApiUploadFile } from "./apiTypes";
 
 export const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
-export interface IngestResult {
-  fileName: string;
-  saved: { id: string; localDate: string; resortName: string | null; verticalM: number; flagged: boolean }[];
-  notes: string[];
-  error?: string;
-}
+export type IngestResult = ApiUploadFile;
 
 export const isGpxName = (name: string) => name.toLowerCase().endsWith(".gpx");
 

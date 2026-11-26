@@ -17,12 +17,12 @@ export default async function Home() {
   const [me, seasons, mountains] = await Promise.all([currentUser(), seasonsWithData(), listMountains()]);
   const season = seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
   const [board, { days: feed, everyone }, myDays] = await Promise.all([
-    leaderboard(season, "vertical", "public"),
+    leaderboard(season, "vertical", "public", { limit: 5, me: me?.id }),
     feedDays(me, 12),
     me ? prisma.skiDay.findMany({ where: { userId: me.id, seasonKey: season, flagged: false } }) : Promise.resolve([]),
   ]);
   const t = totals(myDays);
-  const myRank = me ? board.find((r) => r.user.id === me.id)?.rank : undefined;
+  const myRank = board.mine?.rank;
   const top = Math.max(0, ...myDays.map((d) => d.maxSpeedMps));
 
   return (
@@ -49,7 +49,7 @@ export default async function Home() {
             </div>
             <Stat label="Days" value={String(t.days)} icon={CalendarDays} />
             <Stat label="Top speed" value={mph(top)} unit="mph" icon={Gauge} accent="var(--color-speed)" />
-            <Stat label="World rank" value={myRank ? `#${myRank}` : "–"} icon={Trophy} sub={myRank ? `of ${board.length}` : "Upload to rank"} />
+            <Stat label="World rank" value={myRank ? `#${myRank}` : "–"} icon={Trophy} sub={myRank ? `of ${board.total}` : "Upload to rank"} />
           </div>
           <div className="border-t border-line px-5 py-4">
             <MilestoneBar verticalM={t.verticalM} />
@@ -97,7 +97,7 @@ export default async function Home() {
             >
               Top vertical · {seasonLabel(season)}
             </SectionTitle>
-            <LeaderboardList rows={board} metric="vertical" meId={me?.id} limit={5} compact />
+            <LeaderboardList rows={board.rows} mine={board.mine} metric="vertical" compact />
           </section>
 
           {mountains.length > 0 && (

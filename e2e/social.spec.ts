@@ -63,4 +63,6 @@ test("the phone app's API: feed, a day with run likes, and the trail board", asy
   const board = await request.get(`/api/mountains/${day.mountain}/trails/${encodeURIComponent(run.trail)}`, { headers });
   expect(board.ok()).toBe(true);
   expect((await request.get("/api/me")).status()).toBe(401);
+  await request.post("/api/auth/sign-out", { headers });
+  expect((await request.get("/api/me", { headers })).status()).toBe(401); // the token is revoked
 });

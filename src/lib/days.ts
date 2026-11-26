@@ -51,7 +51,31 @@ export async function saveDay(userId: string, d: ProcessedDay, source: string, f
     },
   });
   await indexRuns(day, d.track, d.stats.segments); // name its runs now so boards and stats are plain queries
+  await refreshSeasonTotal(userId, day.seasonKey);
   return { status: "saved", day };
+}
+
+/** Deletes a day and takes it off the leaderboards. */
+export async function deleteSkiDay(day: Pick<Day, "id" | "userId" | "seasonKey">) {
+  await prisma.skiDay.delete({ where: { id: day.id } });
+  await refreshSeasonTotal(day.userId, day.seasonKey);
+}
+
+/** Recomputes one skier's stored season totals from their (unflagged) days; call after any change. */
+export async function refreshSeasonTotal(userId: string, seasonKey: string) {
+  const days = await prisma.skiDay.findMany({ where: { userId, seasonKey, flagged: false }, select: DAY_LIKE });
+  const key = { userId_seasonKey: { userId, seasonKey } };
+  if (!days.length) return void (await prisma.seasonTotal.deleteMany({ where: { userId, seasonKey } }));
+  const t = totals(days);
+  await prisma.seasonTotal.upsert({ where: key, create: { userId, seasonKey, ...t }, update: t });
+}
+
+/** Rebuilds every stored season total (after changing how totals are counted, or for old data). */
+export async function rebuildSeasonTotals() {
+  const pairs = await prisma.skiDay.findMany({ distinct: ["userId", "seasonKey"], select: { userId: true, seasonKey: true } });
+  await prisma.seasonTotal.deleteMany();
+  for (const p of pairs) await refreshSeasonTotal(p.userId, p.seasonKey);
+  return pairs.length;
 }
 
 export interface SeasonTotals {
@@ -67,6 +91,7 @@ export interface SeasonTotals {
 }
 
 type DayLike = Pick<Day, "verticalM" | "uphillM" | "localDate" | "resortId" | "kind" | "distanceM" | "skiTimeS">;
+const DAY_LIKE = { verticalM: true, uphillM: true, localDate: true, resortId: true, kind: true, distanceM: true, skiTimeS: true } as const;
 
 /** Days are counted by distinct calendar date; resorts only count lift-served days. */
 export function totals(days: DayLike[]): SeasonTotals {
@@ -112,52 +137,52 @@ export function longestStreak(days: Pick<Day, "localDate">[]): { length: number;
 export type Metric = "vertical" | "days" | "resorts" | "bestday" | "uphill";
 export const METRICS: Metric[] = ["vertical", "days", "resorts", "bestday", "uphill"];
 
-const METRIC_VALUE: Record<Metric, (t: SeasonTotals) => number> = {
-  vertical: (t) => t.verticalM,
-  days: (t) => t.days,
-  resorts: (t) => t.resorts,
-  bestday: (t) => t.bestDayM,
-  uphill: (t) => t.uphillM,
-};
+/** The stored column each metric ranks by. */
+const METRIC_COLUMN = { vertical: "verticalM", days: "days", resorts: "resorts", bestday: "bestDayM", uphill: "uphillM" } as const satisfies Record<Metric, keyof SeasonTotals>;
 
 export interface LeaderboardRow extends SeasonTotals {
   rank: number;
   user: User;
 }
 
+export interface Leaderboard {
+  /** the top `limit` skiers, best first */
+  rows: LeaderboardRow[];
+  /** everyone on this board with a non-zero value */
+  total: number;
+  /** `me`'s row, even when it's below the top `limit` (null if they're not on this board) */
+  mine: LeaderboardRow | null;
+}
+
 /**
- * Season leaderboard, either for a set of people (a friends board) or the public board of everyone who
- * opted in. Aggregates in memory, which is fine for a small user base; at scale, move this to a SQL
- * GROUP BY or a materialized per-user season table.
+ * Season leaderboard from the stored season totals: a set of people (a friends board) or the public
+ * board of everyone who opted in. Standard competition ranking: ties share a rank, then the next
+ * rank skips (1, 1, 3). Equal values are listed by vertical.
  */
-export async function leaderboard(seasonKey: string, metric: Metric, scope: string[] | "public"): Promise<LeaderboardRow[]> {
-  const days = await prisma.skiDay.findMany({
-    where: { seasonKey, flagged: false, ...(scope === "public" ? { user: { globalBoard: true } } : { userId: { in: scope } }) },
-    select: { userId: true, verticalM: true, uphillM: true, localDate: true, resortId: true, kind: true, distanceM: true, skiTimeS: true, user: true },
-  });
-
-  const byUser = new Map<string, { user: User; days: DayLike[] }>();
-  for (const d of days) {
-    const entry = byUser.get(d.userId) ?? { user: d.user, days: [] };
-    entry.days.push(d);
-    byUser.set(d.userId, entry);
-  }
-
-  const value = METRIC_VALUE[metric];
-  const rows = [...byUser.values()]
-    .map(({ user, days }) => ({ user, ...totals(days) }))
-    .filter((r) => value(r) > 0)
-    .sort((a, b) => value(b) - value(a) || b.verticalM - a.verticalM);
-
-  // Standard competition ranking: ties share a rank.
+export async function leaderboard(seasonKey: string, metric: Metric, scope: string[] | "public", opts: { limit?: number; me?: string } = {}): Promise<Leaderboard> {
+  const col = METRIC_COLUMN[metric];
+  const where = { seasonKey, [col]: { gt: 0 }, ...(scope === "public" ? { user: { globalBoard: true } } : { userId: { in: scope } }) };
+  const [top, total, own] = await Promise.all([
+    prisma.seasonTotal.findMany({ where, include: { user: true }, orderBy: [{ [col]: "desc" }, { verticalM: "desc" }, { userId: "asc" }], take: opts.limit ?? 100 }),
+    prisma.seasonTotal.count({ where }),
+    opts.me ? prisma.seasonTotal.findFirst({ where: { ...where, userId: opts.me }, include: { user: true } }) : null,
+  ]);
+  const rankOf = async (value: number) => 1 + (await prisma.seasonTotal.count({ where: { ...where, [col]: { gt: value } } }));
   let rank = 0;
-  return rows.map((r, i) => {
-    if (i === 0 || value(rows[i - 1]) !== value(r)) rank = i + 1;
-    return { ...r, rank };
+  const rows = top.map((r, i) => {
+    if (i === 0 || top[i - 1][col] !== r[col]) rank = i + 1;
+    return { ...rowOf(r), rank };
   });
+  const listed = own && rows.find((r) => r.user.id === own.userId);
+  const mine = own ? (listed ?? { ...rowOf(own), rank: await rankOf(own[col]) }) : null;
+  return { rows, total, mine };
+}
+
+function rowOf({ user, verticalM, uphillM, days, resorts, backcountryDays, bestDayM, distanceM, skiTimeS }: SeasonTotals & { user: User }) {
+  return { user, verticalM, uphillM, days, resorts, backcountryDays, bestDayM, distanceM, skiTimeS };
 }
 
 export async function seasonsWithData(): Promise<string[]> {
-  const rows = await prisma.skiDay.findMany({ distinct: ["seasonKey"], select: { seasonKey: true }, orderBy: { seasonKey: "desc" } });
+  const rows = await prisma.seasonTotal.findMany({ distinct: ["seasonKey"], select: { seasonKey: true }, orderBy: { seasonKey: "desc" } });
   return rows.map((r) => r.seasonKey);
 }
