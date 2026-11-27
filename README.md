@@ -60,6 +60,8 @@ GPS tracks are the big columns, and the Prisma client never loads them unless a 
 - **Skied with** (`src/lib/together.ts`): a friend's day at the same resort and date counts when you rode lifts together (within 40 m for most of the ride) or skied runs together (within 90 m for most of the run). Friends only; strangers on the next chair never show up.
 - **Leaderboards:** the public board is opt-in (Settings); the friends board shows you and your friends. Both read `SeasonTotal`, one row per skier and season, refreshed whenever a day is saved or deleted, so a board is one sorted query (top 100, plus your own rank). Trail boards (`/mountains/<slug>/runs/<trail>`) rank the fastest skiers on that trail and the most-liked runs down it.
 - **Comments and likes:** anyone signed in can comment on a day (rate-limited) and like other people's runs.
+- **Privacy** (`src/lib/privacy.ts`): each day is public, friends-only or private. New accounts start friends-only (Settings changes the default, optionally for past days too), and each day can be changed on its page. Every read path filters through it: day pages, replays, feeds, profiles, mountain pages, "skied with", comments and likes; hidden days 404 rather than say they exist. Private days still count toward totals and leaderboards. Trail boards rank public days only. Other people see tracks without their first and last 400 m (`src/lib/trackPrivacy.ts`) unless the owner turns that off. The phone app's replay web view sends its token as a header, so friends-only replays load there too.
+- **Invites** carry you back: signing in from `/invite/<code>` returns to it (`?next=`, same-site paths only, `src/lib/nextPath.ts`), through the emailed link too.
 
 ### 3D mountains and replays
 

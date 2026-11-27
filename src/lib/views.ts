@@ -7,6 +7,7 @@ import { prisma } from "./db";
 import { loadMountain, mountainSlugForResort } from "./mountain/registry";
 import { currentSeasonKey } from "./season";
 import { followCounts, followingIds, isFollowing, skiedWith } from "./social";
+import { canSeeDay, dayFilter, trackFor, visibleDays } from "./privacy";
 import { mountainCompletions } from "./stats";
 import { labelSegments } from "./trails";
 
@@ -18,19 +19,20 @@ import { labelSegments } from "./trails";
 /** A day with its track, trail labels, friends who skied it, comments and per-run likes. */
 export async function loadDay(id: string, me: User | null) {
   const day = await prisma.skiDay.findUnique({ where: { id }, include: { user: true }, omit: WITH_TRACK });
-  if (!day) return null;
+  if (!day || !(await canSeeDay(day, me))) return null; // a day you can't see looks like one that doesn't exist
   const { track, segments, flagReasons } = dayDetail(day);
   const slug = await mountainSlugForResort(day.resortName);
   const labels = slug ? labelSegments(track, segments, await loadMountain(slug)) : segments.map(() => null);
   const isMine = me?.id === day.userId;
   const [companions, comments, runs] = await Promise.all([
-    skiedWith(day, { track, segments }),
+    skiedWith(day, { track, segments }, await visibleDays(me)),
     dayComments(day.id),
     prisma.run.findMany({ where: { dayId: day.id }, include: { likes: me ? { where: { userId: me.id }, select: { userId: true } } : false } }),
   ]);
   return {
     day,
-    track,
+    /** what `me` may see: the owner gets the whole track, others may not see its ends */
+    track: trackFor(track, day.user, me),
     segments,
     flagReasons,
     slug,
@@ -55,8 +57,10 @@ export async function loadProfile(username: string, me: User | null, season?: st
   if (!user) return null;
   const seasons = [...new Set(user.days.map((d) => d.seasonKey))];
   const key = season && seasons.includes(season) ? season : seasons.includes(currentSeasonKey()) ? currentSeasonKey() : (seasons[0] ?? currentSeasonKey());
-  const days = user.days.filter((d) => d.seasonKey === key);
-  const counted = days.filter((d) => !d.flagged);
+  const canSee = await dayFilter(me);
+  const inSeason = user.days.filter((d) => d.seasonKey === key);
+  /** every unflagged day, private ones too: totals count them */
+  const counted = inSeason.filter((d) => !d.flagged);
   const [counts, following, completions] = await Promise.all([
     followCounts(user.id),
     me && me.id !== user.id ? isFollowing(me.id, user.id) : false,
@@ -68,8 +72,10 @@ export async function loadProfile(username: string, me: User | null, season?: st
     canFollow: !!me && me.id !== user.id,
     seasons,
     season: key,
-    /** this season's days, newest first */
-    days,
+    /** this season's days `me` may see, newest first */
+    days: inSeason.filter(canSee),
+    /** all seasons' days `me` may see, newest first */
+    allDays: user.days.filter(canSee),
     counted,
     totals: totals(counted),
     lifetime: totals(user.days.filter((d) => !d.flagged)),
@@ -82,9 +88,9 @@ export async function loadProfile(username: string, me: User | null, season?: st
 
 /** Latest days from you and the people you follow; everyone's when signed out or following nobody. */
 export async function feedDays(me: User | null, take: number) {
-  const following = me ? await followingIds(me.id) : [];
+  const [following, visible] = await Promise.all([me ? followingIds(me.id) : [], visibleDays(me)]);
   const days = await prisma.skiDay.findMany({
-    where: following.length ? { userId: { in: [me!.id, ...following] } } : undefined,
+    where: { AND: [visible, following.length ? { userId: { in: [me!.id, ...following] } } : {}] },
     orderBy: [{ localDate: "desc" }, { startedAt: "desc" }],
     take,
     include: { user: true },

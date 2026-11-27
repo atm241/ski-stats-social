@@ -3,6 +3,7 @@ import { deleteUserAccount } from "./account";
 import { addComment, deleteComment, MAX_COMMENT_CHARS } from "./comments";
 import { prisma } from "./db";
 import { becomeFriends, inviteCodeFor, inviterFor, searchPeople, suggestions } from "./people";
+import { requestLoginLink } from "./magicLink";
 import { clientIp, rateLimit } from "./rateLimit";
 import { setRunLike } from "./runs";
 import { friendIds } from "./social";
@@ -52,6 +53,13 @@ describe("rate limit", () => {
   it("keys on the first forwarded address", () => {
     expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.5, 10.0.0.1" }))).toBe("203.0.113.5");
     expect(clientIp(new Headers())).toBe("unknown");
+  });
+});
+
+describe("sign-in links", () => {
+  it("carry where to land afterwards", async () => {
+    const r = await requestLoginLink("new-skier@example.com", { next: "/invite/abc123" });
+    expect(r.ok && r.devLink).toContain("&next=%2Finvite%2Fabc123");
   });
 });
 

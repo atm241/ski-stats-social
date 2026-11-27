@@ -5,7 +5,8 @@ import { apiToken, signIn } from "./helpers";
 async function openDanasDay(page: import("@playwright/test").Page) {
   await page.goto("/u/dana");
   await page.locator('a[href^="/days/"]').first().click();
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/days\/[^/]+$/);
+  await expect(page.getByText("Comments")).toBeVisible();
 }
 
 test("comment on a friend's day, then delete it", async ({ page }) => {
@@ -32,6 +33,20 @@ test("like a run and take it back", async ({ page }) => {
   await expect(heart).toHaveAttribute("aria-pressed", "false");
 });
 
+test("a friends-only day is hidden from people signed out", async ({ page, browser }) => {
+  await signIn(page, "Dana");
+  await openDanasDay(page);
+  const url = page.url();
+  const control = page.getByRole("group", { name: "Who sees this day" });
+  await control.getByRole("button", { name: "Friends" }).click();
+  await expect(control.getByRole("button", { name: "Friends" })).toHaveAttribute("aria-pressed", "true");
+  const visitor = await (await browser.newContext()).newPage();
+  expect((await visitor.goto(url))?.status()).toBe(404);
+  await control.getByRole("button", { name: "Everyone" }).click();
+  await expect(control.getByRole("button", { name: "Everyone" })).toHaveAttribute("aria-pressed", "true");
+  expect((await visitor.goto(url))?.status()).toBe(200);
+});
+
 test("an invite link makes two skiers friends", async ({ browser }) => {
   const maya = await (await browser.newContext()).newPage();
   await signIn(maya, "Maya");
@@ -39,9 +54,12 @@ test("an invite link makes two skiers friends", async ({ browser }) => {
   const link = (await maya.locator("code").first().textContent())!.trim();
   expect(link).toMatch(/\/invite\//);
 
+  // Kai isn't signed in: the invite sends him through sign-in and straight back
   const kai = await (await browser.newContext()).newPage();
-  await signIn(kai, "Kai");
   await kai.goto(link);
+  await kai.getByRole("link", { name: /Sign in to add/ }).click();
+  await kai.locator("form button", { hasText: "Kai" }).first().click();
+  await expect(kai).toHaveURL(/\/invite\//);
   const accept = kai.getByRole("button", { name: /as a friend/ });
   if (await accept.count()) {
     await accept.click();

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ApiDayDetail } from "@shared/apiTypes";
 import { duration, feet, miles, mph, prettyDate } from "@shared/format";
+import { VISIBILITIES, VISIBILITY_LABEL } from "@shared/visibility";
 import { Avatar, Button, Card, Loading, s, Section, Stat } from "@/components/ui";
 import { C, DIFFICULTY_COLOR } from "@/lib/theme";
 import { useApi } from "@/lib/useApi";
@@ -44,6 +45,8 @@ export default function DayScreen() {
             {data.user.displayName} · {prettyDate(data.localDate)}
           </Text>
       </Pressable>
+
+      <VisibilityRow day={data} onChange={reload} />
 
       <Card style={{ marginTop: 14, paddingHorizontal: 16, paddingVertical: 8 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
@@ -206,5 +209,34 @@ function Comments({ day, onChange }: { day: ApiDayDetail; onChange: () => void }
         )}
       </Card>
     </Section>
+  );
+}
+
+/** Owner: pick who sees the day. Everyone else: a note when it isn't public. */
+function VisibilityRow({ day, onChange }: { day: ApiDayDetail; onChange: () => void }) {
+  const { token } = useAuth();
+  const [busy, setBusy] = useState(false);
+  if (!day.isMine)
+    return day.visibility === "public" ? null : (
+      <Text style={{ color: C.inkFaint, fontSize: 12, paddingHorizontal: 16, paddingTop: 8 }}>{day.visibility === "friends" ? "Friends only" : "Only you"}</Text>
+    );
+  const set = async (visibility: string) => {
+    setBusy(true);
+    try {
+      await api(`/api/days/${day.id}`, { method: "PATCH", token, body: JSON.stringify({ visibility }) });
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingTop: 10 }}>
+      <Text style={{ color: C.inkSoft, fontSize: 12, marginRight: 2 }}>Who sees this</Text>
+      {VISIBILITIES.map((v) => (
+        <Pressable key={v} disabled={busy} onPress={() => set(v)} style={[s.chip, { backgroundColor: day.visibility === v ? C.hover : "transparent", paddingVertical: 4 }]}>
+          <Text style={{ color: day.visibility === v ? C.ink : C.inkSoft, fontSize: 12 }}>{VISIBILITY_LABEL[v]}</Text>
+        </Pressable>
+      ))}
+    </View>
   );
 }

@@ -16,6 +16,7 @@ import { currentUser } from "@/lib/auth";
 import { friendIds } from "@/lib/social";
 import { busiestTrails } from "@/lib/runs";
 import { mountainCompletions, trailStats } from "@/lib/stats";
+import { dayFilter } from "@/lib/privacy";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -37,20 +38,23 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
   }
   const vert = Math.round((hi - lo) * FT);
 
-  // Who skis here: the most recent season with days at this mountain.
+  // Who skis here: the most recent season with days at this mountain. The board shows people on
+  // the public leaderboard plus you and your friends; the days list only days you may see.
+  const me = await currentUser();
+  const crew = me ? [me.id, ...(await friendIds(me.id))] : [];
   const resorts = data.resorts ?? [data.name];
   const days = await prisma.skiDay.findMany({ where: { resortName: { in: resorts }, flagged: false }, include: { user: true }, orderBy: [{ localDate: "desc" }, { startedAt: "desc" }] });
+  const canSee = await dayFilter(me);
+  const shownDays = days.filter(canSee);
   const season = days.some((d) => d.seasonKey === currentSeasonKey()) ? currentSeasonKey() : days[0]?.seasonKey;
   const seasonDays = days.filter((d) => d.seasonKey === season);
   const byUser = new Map<string, { user: (typeof days)[number]["user"]; days: typeof days }>();
-  for (const d of seasonDays) byUser.set(d.userId, { user: d.user, days: [...(byUser.get(d.userId)?.days ?? []), d] });
+  for (const d of seasonDays) if (d.user.globalBoard || crew.includes(d.userId)) byUser.set(d.userId, { user: d.user, days: [...(byUser.get(d.userId)?.days ?? []), d] });
   const board = [...byUser.values()].map((u) => ({ user: u.user, ...totals(u.days) })).sort((a, b) => b.verticalM - a.verticalM);
   const trails = season ? await trailStats({ mountain: slug, seasonKey: season }) : null;
   const boards = await busiestTrails(slug, 12);
 
   // "Ski every run": your progress here (all seasons), and your friends' for comparison
-  const me = await currentUser();
-  const crew = me ? [me.id, ...(await friendIds(me.id))] : [];
   const crewUsers = new Map(days.filter((d) => crew.includes(d.userId)).map((d) => [d.userId, d.user]));
   const progress = (
     await Promise.all(
@@ -178,11 +182,11 @@ export default async function MountainPage({ params }: { params: Promise<{ slug:
         </section>
       )}
 
-      {days.length > 0 && (
+      {shownDays.length > 0 && (
         <section>
-          <SectionTitle right={`${days.length} total`}>Recent days here</SectionTitle>
+          <SectionTitle right={`${shownDays.length} total`}>Recent days here</SectionTitle>
           <div className="card divide-y divide-line overflow-hidden">
-            {days.slice(0, 8).map((d) => (
+            {shownDays.slice(0, 8).map((d) => (
               <DayCard key={d.id} day={d} user={d.user} />
             ))}
           </div>

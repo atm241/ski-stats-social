@@ -6,25 +6,29 @@ import { prisma } from "@/lib/db";
 import { dayDetail, WITH_TRACK } from "@/lib/days";
 import { feet, prettyDate } from "@/lib/format";
 import { mountainSlugForResort } from "@/lib/mountain/registry";
+import { pageViewer } from "@/lib/auth";
+import { canSeeDay, trackFor, visibleDays } from "@/lib/privacy";
 import { skiedWith } from "@/lib/social";
 
 /** "Dana · Alta Ski Area, Feb 15" */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const day = await prisma.skiDay.findUnique({ where: { id }, select: { resortName: true, localDate: true, user: { select: { displayName: true } } } });
-  if (!day) return { title: "Not found" };
+  const day = await prisma.skiDay.findUnique({ where: { id }, select: { userId: true, visibility: true, resortName: true, localDate: true, user: { select: { displayName: true } } } });
+  if (!day || !(await canSeeDay(day, await pageViewer()))) return { title: "Not found" };
   return { title: `Replay: ${day.user.displayName} · ${day.resortName ?? "Backcountry"}, ${prettyDate(day.localDate, { month: "short", day: "numeric" })}` };
 }
 
 export default async function ReplayPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ embed?: string }> }) {
   const { id } = await params;
   const embed = (await searchParams).embed === "1";
+  const me = await pageViewer();
   const day = await prisma.skiDay.findUnique({ where: { id }, include: { user: true }, omit: WITH_TRACK });
-  if (!day) notFound();
+  if (!day || !(await canSeeDay(day, me))) notFound();
   const slug = await mountainSlugForResort(day.resortName);
-  const { track, segments } = dayDetail(day);
-  // friends who skied with them ride along in the replay
-  const companions = slug ? await skiedWith(day, { track, segments }) : [];
+  const { track: fullTrack, segments } = dayDetail(day);
+  const track = trackFor(fullTrack, day.user, me);
+  // friends who skied with them ride along in the replay (each with their own track privacy)
+  const companions = slug ? await skiedWith(day, { track: fullTrack, segments }, await visibleDays(me)) : [];
   const title = `${day.user.displayName} · ${day.resortName} · ${prettyDate(day.localDate, { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
@@ -52,7 +56,7 @@ export default async function ReplayPage({ params, searchParams }: { params: Pro
           segments={segments}
           timeZone={day.timezone}
           rider={{ avatar: day.user.avatar, displayName: day.user.displayName }}
-          companions={companions.map((c) => ({ track: c.track, segments: c.segments, rider: { avatar: c.user.avatar, displayName: c.user.displayName } }))}
+          companions={companions.map((c) => ({ track: trackFor(c.track, c.user, me), segments: c.segments, rider: { avatar: c.user.avatar, displayName: c.user.displayName } }))}
           title={title}
         />
       ) : (

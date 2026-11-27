@@ -25,6 +25,12 @@ model User {
   globalBoard Boolean  @default(false)
   /// Secret code in the user's invite link (/invite/<code>); opening it lets someone add them as a friend.
   inviteCode  String?  @unique
+  /// Who sees new days: "public" (everyone), "friends" (mutual follows) or "private" (only you).
+  /// Friends by default: location data stays among people you chose until you say otherwise.
+  defaultVisibility String  @default("friends")
+  /// Trim the first and last stretch of tracks for everyone but you, so where you start recording
+  /// (home, a hotel, a car park) doesn't show on maps and replays.
+  hideTrackEnds     Boolean @default(true)
   createdAt   DateTime @default(now())
   days        SkiDay[]
   sessions    Session[]
@@ -138,6 +144,8 @@ model SkiDay {
   /// Flagged days are kept but excluded from leaderboards.
   flagged       Boolean  @default(false)
   flagReasons   String?
+  /// "public", "friends" or "private" (see src/lib/privacy.ts). Private days still count in your totals.
+  visibility    String   @default("public")
   /// "gpx" today; later "strava", "healthkit", ...
   source        String
   fileName      String?

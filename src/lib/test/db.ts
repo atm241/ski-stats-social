@@ -15,8 +15,9 @@ export async function resetDb() {
 }
 
 let n = 0;
-export function makeUser(username = `skier${++n}`, extra: { email?: string; globalBoard?: boolean } = {}) {
-  return prisma.user.create({ data: { username, displayName: username[0].toUpperCase() + username.slice(1), avatar: "", color: "#38bdf8", ...extra } });
+/** A test skier. Their days are public unless `defaultVisibility` says otherwise (real accounts start friends-only). */
+export function makeUser(username = `skier${++n}`, extra: { email?: string; globalBoard?: boolean; defaultVisibility?: string } = {}) {
+  return prisma.user.create({ data: { username, displayName: username[0].toUpperCase() + username.slice(1), avatar: "", color: "#38bdf8", defaultVisibility: "public", ...extra } });
 }
 
 export async function saveParkCityDay(userId: string, start?: string, seed?: number) {

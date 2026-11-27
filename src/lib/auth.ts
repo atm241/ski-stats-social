@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { prisma } from "./db";
@@ -54,14 +54,28 @@ export async function createApiToken(userId: string, name: string) {
   return secret;
 }
 
+/** The user an API token belongs to (and note that it was used), or null. */
+async function userForToken(secret: string) {
+  const row = await prisma.apiToken.findUnique({ where: { tokenHash: hashToken(secret) }, include: { user: true } });
+  if (!row) return null;
+  await prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
+  return row.user;
+}
+
+const bearer = (authorization: string | null) => (authorization?.startsWith(`Bearer ${API_TOKEN_PREFIX}`) ? authorization.slice(7).trim() : null);
+
 /** The user behind a request: a "Bearer pp_…" API token (phone app, scripts) or, failing that, the session cookie. */
 export async function userFromRequest(req: Request): Promise<{ user: Awaited<ReturnType<typeof currentUser>>; via: "token" | "session" }> {
-  const auth = req.headers.get("authorization");
-  if (auth?.startsWith(`Bearer ${API_TOKEN_PREFIX}`)) {
-    const row = await prisma.apiToken.findUnique({ where: { tokenHash: hashToken(auth.slice(7).trim()) }, include: { user: true } });
-    if (!row) return { user: null, via: "token" };
-    await prisma.apiToken.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
-    return { user: row.user, via: "token" };
-  }
+  const secret = bearer(req.headers.get("authorization"));
+  if (secret) return { user: await userForToken(secret), via: "token" };
   return { user: await currentUser(), via: "session" };
 }
+
+/**
+ * For pages the phone app shows in a web view (the 3D replay): it sends its API token as a header,
+ * since the web view has no session cookie. Elsewhere this is just the signed-in user.
+ */
+export const pageViewer = cache(async () => {
+  const secret = bearer((await headers()).get("authorization"));
+  return secret ? userForToken(secret) : currentUser();
+});

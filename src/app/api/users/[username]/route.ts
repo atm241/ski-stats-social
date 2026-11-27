@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ username
     followingCount: p.followingCount,
     lifetime: { verticalM: p.lifetime.verticalM, days: p.lifetime.days },
     season: { key: p.season, verticalM: p.totals.verticalM, days: p.totals.days, resorts: p.totals.resorts },
-    days: await Promise.all(p.user.days.slice(0, 50).map((d) => apiDay({ ...d, user: p.user }))),
+    days: await Promise.all(p.allDays.slice(0, 50).map((d) => apiDay({ ...d, user: p.user }))),
     completions: p.completions.map((c) => ({ slug: c.slug, name: c.name, skied: c.skied, total: c.total })),
   };
   return NextResponse.json(body);

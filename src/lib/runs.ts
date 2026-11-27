@@ -2,6 +2,7 @@ import "server-only";
 import type { StoredTrack } from "./analysis/process";
 import type { Segment } from "./analysis/types";
 import { prisma } from "./db";
+import { canSeeDay } from "./privacy";
 import { type Day, dayDetail, WITH_TRACK } from "./dayRecord";
 import { loadMountain, mountainSlugForResort } from "./mountain/registry";
 import type { MountainData } from "./mountain/types";
@@ -53,8 +54,8 @@ export async function reindexDays(mountain?: string) {
 
 /** Like or unlike a run; returns the new state and count. You can't like your own run. */
 export async function setRunLike(userId: string, runId: string, like: boolean) {
-  const run = await prisma.run.findUnique({ where: { id: runId }, select: { userId: true } });
-  if (!run || run.userId === userId) return null;
+  const run = await prisma.run.findUnique({ where: { id: runId }, select: { userId: true, day: { select: { userId: true, visibility: true } } } });
+  if (!run || run.userId === userId || !(await canSeeDay(run.day, { id: userId }))) return null;
   const key = { userId_runId: { userId, runId } };
   const had = !!(await prisma.runLike.findUnique({ where: key }));
   if (like && !had) await prisma.$transaction([prisma.runLike.create({ data: { userId, runId } }), prisma.run.update({ where: { id: runId }, data: { likeCount: { increment: 1 } } })]);
@@ -68,11 +69,11 @@ const BOARD_SIZE = 25;
 /**
  * Leaderboards for one trail. Fastest: each skier's best top speed *while on this trail* (a fast
  * runout below a chute doesn't count), flagged days excluded. Most liked: individual runs that went
- * down it, by likes.
+ * down it, by likes. Only public days are ranked, since every entry links to its day.
  */
 export async function trailBoards(mountain: string, trail: string) {
   const onTrail = await prisma.runTrail.findMany({
-    where: { mountain, trail, flagged: false },
+    where: { mountain, trail, flagged: false, run: { day: { visibility: "public" } } },
     include: { run: { include: { user: true, day: { select: { localDate: true } } } } },
     orderBy: { maxSpeedMps: "desc" },
   });
@@ -82,7 +83,7 @@ export async function trailBoards(mountain: string, trail: string) {
     .slice(0, BOARD_SIZE)
     .map((t) => ({ ...t.run, maxSpeedMps: t.maxSpeedMps }));
   const liked = await prisma.run.findMany({
-    where: { mountain, onTrails: { some: { trail } }, likeCount: { gt: 0 } },
+    where: { mountain, onTrails: { some: { trail } }, likeCount: { gt: 0 }, day: { visibility: "public" } },
     include: { user: true, day: { select: { localDate: true } } },
     orderBy: [{ likeCount: "desc" }, { startedAt: "asc" }],
     take: BOARD_SIZE,

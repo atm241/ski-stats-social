@@ -150,8 +150,8 @@ async function main() {
 
   let seed = 1;
   for (const s of SKIERS) {
-    // demo skiers are on the public board, except Sam, who keeps to friends
-    const user = await prisma.user.create({ data: { username: s.username, displayName: s.displayName, avatar: s.avatar, color: s.color, globalBoard: s.username !== "skintrack_sam" } });
+    // demo skiers are on the public board, except Sam, who keeps to friends (his days are friends-only too)
+    const user = await prisma.user.create({ data: { username: s.username, displayName: s.displayName, avatar: s.avatar, color: s.color, globalBoard: s.username !== "skintrack_sam", defaultVisibility: s.username === "skintrack_sam" ? "friends" : "public" /* demo skiers share publicly so the demo has a feed */ } });
     let saved = 0;
     for (const trip of s.trips) {
       const rand = rng(seed++);

@@ -100,7 +100,7 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
       {counted.length > 0 && (
         <section>
           <SectionTitle>Personal bests</SectionTitle>
-          <PersonalBests days={counted} />
+          <PersonalBests days={days.filter((d) => !d.flagged)} />
         </section>
       )}
 

@@ -28,10 +28,10 @@ export default async function InvitePage({ params }: { params: Promise<{ code: s
         </div>
         {!me ? (
           <>
-            <Link href="/login" className="btn-primary w-full">
+            <Link href={`/login?next=${encodeURIComponent(`/invite/${code}`)}`} className="btn-primary w-full">
               Sign in to add {inviter.displayName.split(" ")[0]}
             </Link>
-            <p className="text-xs text-ink-faint">After signing in, open this link again.</p>
+            <p className="text-xs text-ink-faint">New here? Signing in creates your account, then brings you back to this invite.</p>
           </>
         ) : already ? (
           <Link href={`/u/${inviter.username}`} className="btn-ghost w-full">

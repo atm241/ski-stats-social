@@ -8,6 +8,9 @@ import { regenerateUploadAddress, setGlobalBoard, signOut } from "../actions";
 import { CopyButton } from "./CopyButton";
 import { ProfileForm } from "./ProfileForm";
 import { DeleteAccount } from "./DeleteAccount";
+import { PrivacyForm } from "./PrivacyForm";
+import { isVisibility } from "@/lib/visibility";
+import { safeNext } from "@/lib/nextPath";
 import { SyncTokens } from "./SyncTokens";
 
 const STATUS: Record<string, { label: string; className: string }> = {
@@ -19,9 +22,10 @@ const STATUS: Record<string, { label: string; className: string }> = {
 
 export const metadata = { title: "Settings" };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ welcome?: string; next?: string }> }) {
   const me = await requireUser();
-  const { welcome } = await searchParams;
+  const { welcome, next: rawNext } = await searchParams;
+  const next = safeNext(rawNext);
   const [uploads, tokens] = await Promise.all([
     prisma.upload.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" }, take: 25 }),
     prisma.apiToken.findMany({ where: { userId: me.id }, orderBy: { createdAt: "desc" } }),
@@ -33,6 +37,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">{welcome ? "Welcome" : "Settings"}</h1>
         {welcome && <p className="mt-1 text-ink-soft">Pick a username, then grab your upload address below.</p>}
+        {welcome && next && (
+          <Link href={next} className="btn-primary mt-3">
+            {next.startsWith("/invite/") ? "Continue to your invite" : "Continue where you were"} →
+          </Link>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -86,6 +95,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <button className={me.globalBoard ? "btn-ghost" : "btn-primary"}>{me.globalBoard ? "Leave the public board" : "Join the public board"}</button>
           </form>
         </div>
+      </section>
+
+      <section id="privacy">
+        <SectionTitle>Privacy</SectionTitle>
+        <PrivacyForm defaultVisibility={isVisibility(me.defaultVisibility) ? me.defaultVisibility : "public"} hideTrackEnds={me.hideTrackEnds} />
       </section>
 
       <section>

@@ -4,7 +4,8 @@ import { MailCheck } from "lucide-react";
 import { useActionState } from "react";
 import { requestLink, type LinkState } from "../actions";
 
-export function LoginForm() {
+/** `next`: where to land after signing in (carried through the emailed link). */
+export function LoginForm({ next }: { next?: string | null }) {
   const [state, action, pending] = useActionState<LinkState, FormData>(requestLink, {});
 
   if (state.sentTo) {
@@ -29,6 +30,7 @@ export function LoginForm() {
 
   return (
     <form action={action} className="card space-y-4 p-5">
+      {next && <input type="hidden" name="next" value={next} />}
       <label className="block">
         <span className="label mb-1.5 block">Email</span>
         <input name="email" type="email" required autoComplete="email" placeholder="you@example.com" className="input" />

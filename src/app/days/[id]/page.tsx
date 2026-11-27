@@ -1,7 +1,7 @@
-import { ArrowDownRight, Gauge, Mountain, Play, Route, Timer, TrendingUp, Armchair, Hash } from "lucide-react";
+import { ArrowDownRight, Gauge, Mountain, Play, Route, Timer, TrendingUp, Armchair, Hash, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteCommentAction, deleteDay } from "@/app/actions";
+import { deleteCommentAction, deleteDay, setDayVisibilityAction } from "@/app/actions";
 import { Avatar } from "@/components/Avatar";
 import { DayBreakdown } from "@/components/DayBreakdown";
 import { DayExplorer, type RunSocial } from "@/components/DayExplorer";
@@ -9,6 +9,8 @@ import { Difficulty, DIFFICULTY_COLOR, DIFFICULTY_NAME, DIFFICULTY_ORDER, normDi
 import { currentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { clockTime, duration, feet, miles, mph, prettyDate } from "@/lib/format";
+import { canSeeDay } from "@/lib/privacy";
+import { VISIBILITIES, VISIBILITY_LABEL } from "@/lib/visibility";
 import { loadDay } from "@/lib/views";
 import { CommentForm } from "./CommentForm";
 
@@ -17,8 +19,8 @@ const KIND_LABEL: Record<string, string> = { resort: "Resort", backcountry: "Bac
 /** "Dana · Alta Ski Area, Feb 15" */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const day = await prisma.skiDay.findUnique({ where: { id }, select: { resortName: true, localDate: true, user: { select: { displayName: true } } } });
-  if (!day) return { title: "Not found" };
+  const day = await prisma.skiDay.findUnique({ where: { id }, select: { userId: true, visibility: true, resortName: true, localDate: true, user: { select: { displayName: true } } } });
+  if (!day || !(await canSeeDay(day, await currentUser()))) return { title: "Not found" };
   return { title: `${day.user.displayName} · ${day.resortName ?? "Backcountry"}, ${prettyDate(day.localDate, { month: "short", day: "numeric" })}` };
 }
 
@@ -62,7 +64,27 @@ export default async function DayPage({ params }: { params: Promise<{ id: string
             <span className="chip num">
               {clockTime(day.startedAt, day.timezone)} – {clockTime(day.endedAt, day.timezone)}
             </span>
+            {!isMine && day.visibility !== "public" && (
+              <span className="chip">
+                <Lock size={11} aria-hidden /> {day.visibility === "friends" ? "Friends only" : "Only you"}
+              </span>
+            )}
           </div>
+          {isMine && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-ink-soft">
+              <Lock size={12} aria-hidden />
+              <span>Who sees this day</span>
+              <div className="flex rounded-lg border border-line bg-surface p-0.5" role="group" aria-label="Who sees this day">
+                {VISIBILITIES.map((v) => (
+                  <form key={v} action={setDayVisibilityAction.bind(null, day.id, v)}>
+                    <button aria-pressed={day.visibility === v} className={`rounded-md px-2.5 py-1 ${day.visibility === v ? "bg-hover text-ink" : "hover:text-ink"}`}>
+                      {VISIBILITY_LABEL[v]}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         {slug && (
           <Link href={`/days/${day.id}/replay`} className="btn-primary">

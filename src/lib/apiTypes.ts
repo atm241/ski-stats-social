@@ -67,6 +67,9 @@ export interface ApiProfile {
 }
 
 export interface ApiDayDetail extends ApiDaySummary {
+  /** "public" | "friends" | "private" (see @shared/visibility) */
+  visibility: string;
+  isMine: boolean;
   timezone: string;
   startedAt: number;
   endedAt: number;

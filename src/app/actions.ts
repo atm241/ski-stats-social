@@ -14,6 +14,9 @@ import { becomeFriends, inviterFor } from "@/lib/people";
 import { setRunLike } from "@/lib/runs";
 import { APP_SCHEME } from "@/lib/brand";
 import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { savePrivacy, setDayVisibility } from "@/lib/privacy";
+import { isVisibility } from "@/lib/visibility";
+import { safeNext } from "@/lib/nextPath";
 import { newUploadToken } from "@/lib/tokens";
 
 export type LinkState = { sentTo?: string; devLink?: string; error?: string };
@@ -23,7 +26,7 @@ export async function requestLink(_: LinkState, form: FormData): Promise<LinkSta
   if (!email) return { error: "That doesn't look like an email address." };
   // per address is limited in requestLoginLink; this stops one sender mailing many addresses
   if (!(await rateLimit(`login-ip:${clientIp(await headers())}`, 10, 15 * 60_000))) return { error: "Too many sign-in emails from here. Try again in a few minutes." };
-  const r = await requestLoginLink(email);
+  const r = await requestLoginLink(email, { next: safeNext(form.get("next")) });
   return r.ok ? { sentTo: email, devLink: r.devLink } : { error: r.error };
 }
 
@@ -34,16 +37,18 @@ export async function verifyLogin(form: FormData) {
   // From the phone app: hand it a revocable API token through its deep link instead of a browser session.
   if (form.get("app")) redirect(`${APP_SCHEME}://auth?token=${encodeURIComponent(await createApiToken(result.user.id, "Gapr app"))}`);
   await createSession(result.user.id);
-  redirect(result.isNew ? "/settings?welcome=1" : "/");
+  const next = safeNext(form.get("next"));
+  if (result.isNew) redirect(`/settings?welcome=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
+  redirect(next ?? "/");
 }
 
 /** Local development only: sign in as a seeded demo skier without email. */
-export async function devSignIn(username: string) {
+export async function devSignIn(username: string, next: string | null) {
   if (process.env.NODE_ENV === "production") return;
   const user = await prisma.user.findUnique({ where: { username } });
   if (!user) return;
   await createSession(user.id);
-  redirect("/");
+  redirect(safeNext(next) ?? "/");
 }
 
 export async function signOut() {
@@ -186,4 +191,25 @@ export async function acceptInvite(code: string) {
   await becomeFriends(me.id, inviter.id);
   revalidatePath("/", "layout");
   redirect(`/u/${inviter.username}`);
+}
+
+/** The owner of a day changes who can see it (from the day page). */
+export async function setDayVisibilityAction(dayId: string, visibility: string) {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  if (!isVisibility(visibility) || !(await setDayVisibility(me.id, dayId, visibility))) return;
+  revalidatePath(`/days/${dayId}`);
+}
+
+export type PrivacyState = { saved?: boolean; error?: string };
+
+/** Settings → Privacy. */
+export async function savePrivacyAction(_: PrivacyState, form: FormData): Promise<PrivacyState> {
+  const me = await currentUser();
+  if (!me) redirect("/login");
+  const visibility = form.get("defaultVisibility");
+  if (!isVisibility(visibility)) return { error: "Pick who sees your days." };
+  await savePrivacy(me.id, { defaultVisibility: visibility, hideTrackEnds: form.get("hideTrackEnds") === "on", applyToPast: form.get("applyToPast") === "on" });
+  revalidatePath("/", "layout");
+  return { saved: true };
 }

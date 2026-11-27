@@ -16,9 +16,11 @@ export async function saveDay(userId: string, d: ProcessedDay, source: string, f
   const overlap = await prisma.skiDay.findFirst({ where: { userId, startedAt: { lt: endedAt }, endedAt: { gt: startedAt } } });
   if (overlap) return { status: "duplicate", localDate: d.localDate };
 
+  const owner = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { defaultVisibility: true } });
   const day = await prisma.skiDay.create({
     data: {
       userId,
+      visibility: owner.defaultVisibility,
       localDate: d.localDate,
       seasonKey: d.seasonKey,
       timezone: d.timezone,

@@ -1,5 +1,5 @@
 import "server-only";
-import type { User } from "@/generated/prisma/client";
+import type { Prisma, User } from "@/generated/prisma/client";
 import type { StoredTrack } from "./analysis/process";
 import type { Segment } from "./analysis/types";
 import { type Day, dayDetail, WITH_TRACK } from "./dayRecord";
@@ -37,12 +37,13 @@ export type Companion = { user: User; day: Day; track: StoredTrack; segments: Se
  * you shared (see together.ts). Only mutual follows are shown, so a stranger on the next chair is
  * never revealed on your day, and you never show up on theirs.
  */
-export async function skiedWith(day: Day, mine: { track: StoredTrack; segments: Segment[] }): Promise<Companion[]> {
+export async function skiedWith(day: Day, mine: { track: StoredTrack; segments: Segment[] }, visible: Prisma.SkiDayWhereInput): Promise<Companion[]> {
   if (!day.resortName) return [];
   const friends = await friendIds(day.userId);
   if (!friends.length) return [];
   const others = await prisma.skiDay.findMany({
-    where: { localDate: day.localDate, resortName: day.resortName, userId: { in: friends } },
+    // `visible`: only days the viewer may see (a friend's private day never shows up as a companion)
+    where: { AND: [{ localDate: day.localDate, resortName: day.resortName, userId: { in: friends } }, visible] },
     include: { user: true },
     omit: WITH_TRACK,
   });

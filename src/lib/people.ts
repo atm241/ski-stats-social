@@ -47,7 +47,7 @@ export async function suggestions(me: User, take = 8): Promise<Suggestion[]> {
   }
   const myResorts = await prisma.skiDay.findMany({ where: { userId: me.id, resortName: { not: null } }, select: { resortName: true }, distinct: ["resortName"] });
   if (myResorts.length) {
-    const there = await prisma.skiDay.findMany({ where: { resortName: { in: myResorts.map((r) => r.resortName!) }, userId: { notIn: [...skip] } }, select: { userId: true, resortName: true }, distinct: ["userId"], take: 50 });
+    const there = await prisma.skiDay.findMany({ where: { resortName: { in: myResorts.map((r) => r.resortName!) }, userId: { notIn: [...skip] }, visibility: "public" }, select: { userId: true, resortName: true }, distinct: ["userId"], take: 50 });
     for (const d of there) add(d.userId, `Skis ${d.resortName}`);
   }
 
